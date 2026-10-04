@@ -1,56 +1,30 @@
 """Модуль расчёта скидки."""
-from datetime import datetime, timedelta
+from datetime import datetime
 import sqlite3
 from config import DB_PATH
 
 
-def get_previous_month_range(date):
-    """
-    Возвращает (начало, конец) предыдущего месяца.
-    
-    :param date: дата расчёта
-    :return: (start_date, end_date) в формате YYYY-MM-DD
-    """
-    first_day = date.replace(day=1)
-    last_day_prev = first_day - timedelta(days=1)
-    first_day_prev = last_day_prev.replace(day=1)
-    return (
-        first_day_prev.strftime("%Y-%m-%d"),
-        last_day_prev.strftime("%Y-%m-%d")
-    )
-
-
-def has_orders_in_previous_month(product_id, date):
-    """
-    Есть ли заказы товара в предыдущем месяце?
-    
-    :param product_id: id товара
-    :param date: дата расчёта
-    :return: True / False
-    """
-    start, end = get_previous_month_range(date)
-
+def get_product_quantity(product_id):
+    """Возвращает текущий остаток товара на складе из БД."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute(
-        "SELECT COUNT(*) FROM Заказ "
-        "WHERE товар_id = ? AND дата BETWEEN ? AND ?",
-        (product_id, start, end)
-    )
-    count = cur.fetchone()[0]
+    cur.execute("SELECT количество FROM Товар WHERE id = ?", (product_id,))
+    row = cur.fetchone()
     conn.close()
-    return count > 0
+    return row[0] if row else 0
 
 
-def calculate_price_with_discount(product_id, price, date):
+def calculate_price_with_discount(product_id, price, date=None):
     """
-    Рассчитывает цену со скидкой 25%.
+    Рассчитывает цену со скидкой 10% при остатке <= 3.
     
     :param product_id: id товара
     :param price: базовая цена
-    :param date: дата расчёта
+    :param date: дата расчёта (оставлена для совместимости)
     :return: цена со скидкой или без
     """
-    if has_orders_in_previous_month(product_id, date):
-        return price
-    return price * 0.75
+    quantity = get_product_quantity(product_id)
+    
+    if quantity <= 3:
+        return price * 0.9  # Скидка 10%
+    return price
