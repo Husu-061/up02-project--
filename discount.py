@@ -24,7 +24,6 @@ def calculate_price_with_discount(product_id, price, date=None):
     :return: цена со скидкой или без
     """
     quantity = get_product_quantity(product_id)
-    
-    if quantity <= 3:
+    if quantity <= 25:
         return price * 0.9  # Скидка 10%
     return price
