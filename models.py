@@ -1,3 +1,5 @@
+from datetime import datetime
+from discount import calculate_price_with_discount
 class Product:
     def __init__(self, product_id, genre, artist, title, duration, price, quantity):
         """
@@ -27,6 +29,11 @@ class Product:
 
     def total(self) -> float:
         return self.price * self.quantity
+
+    def price_with_discount_auto(self, date=None):
+        if date is None:
+            date = datetime.now()
+        return calculate_price_with_discount(self.id, self.price, date)
 
     def price_with_discount(self, discount_percent: float) -> float:
         return self.price * (1 - discount_percent / 100)
