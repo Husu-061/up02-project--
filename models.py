@@ -38,6 +38,10 @@ class Product:
     def price_with_discount(self, discount_percent: float) -> float:
         return self.price * (1 - discount_percent / 100)
 
+    def discounted_price(self):
+        """Цена со скидкой 25% (упрощённо)."""
+        return self.price * 0.75
+
     def indicator(self) -> str:
         if self.quantity > 20:
             return "🟢 много"
@@ -100,3 +104,4 @@ class Order:
             f"\tТовар: {name}, Кол-во: {price_str}{status}\n"
             f"\tИтого: {self.total() or '-'}"
         )
+    
