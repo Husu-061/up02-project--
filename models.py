@@ -70,6 +70,10 @@ class Order:
         self.client = client
         self.product_id = product_id  # ЧИСЛОВОЙ id из БД
         self.quantity = quantity
+        
+    def order_info(self):
+        """Текстовая информация о заказе."""
+        return f"Заказ №{self.id} от {self.date}: {self.client}"
 
     product: Product | None = None
     def total(self) -> float | None:
