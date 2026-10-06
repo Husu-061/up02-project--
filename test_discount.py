@@ -1,26 +1,50 @@
+"""Тестирование алгоритма скидки."""
 from datetime import datetime
-from discount import calculate_price_with_discount
+from discount import (
+    calculate_price_with_discount,
+    calculate_price_with_discount_orders
+)
+
+
+def print_test_report(passed, total):
+    """Печатает итоговый отчёт по тестам."""
+    print("=" * 40)
+    print("ОТЧЁТ О ТЕСТИРОВАНИИ")
+    print(f"Пройдено: {passed} / {total}")
+    if passed == total:
+        print("Результат: ✅ УСПЕХ")
+    else:
+        print("Результат: ❌ ЕСТЬ ОШИБКИ")
+    print("=" * 40)
 
 
 def run_tests():
-    # (product_id, price, date, expected, comment)
+    """Прогон всех тестов."""
     test_cases = [
-        # --- Базовые тесты (из ДЗ, товары с остатком > 3) ---
-        (1, 100, datetime(2026, 10, 15), 100, "The Beatles — остаток > 3"),
-        (2, 120, datetime(2026, 10, 15), 120, "Michael Jackson — остаток > 3"),
-        (3, 90, datetime(2026, 10, 15), 90, "Louis Armstrong — остаток > 3"),
-        (5, 110, datetime(2026, 10, 15), 110, "Eminem — остаток > 3"),
-        
-        # --- Тесты на скидку (товары с остатком <= 3) ---
-        # Внимание: чтобы эти тесты прошли, в БД остаток должен быть 2!
+        # ===== Базовые тесты (Логика 1: остаток <= 3) =====
+        (1, 100, datetime(2026, 10, 15), 100, "The Beatles — остаток 50 → без скидки"),
+        (2, 120, datetime(2026, 10, 15), 120, "Michael Jackson — остаток 40 → без скидки"),
         (4, 150, datetime(2026, 10, 15), 135.0, "Бетховен — остаток 2 → скидка 10%"),
         (6, 130, datetime(2026, 10, 15), 117.0, "Daft Punk — остаток 2 → скидка 10%"),
         (7, 100, datetime(2026, 10, 15), 90.0, "Би-2 — остаток 2 → скидка 10%"),
-        
-        # --- Новые тесты на разные даты ---
-        (4, 150, datetime(2026, 11, 15), 135.0, "Бетховен — другая дата, остаток 2"),
-        (1, 100, datetime(2026, 11, 15), 100, "The Beatles — другая дата, остаток > 3"),
-        (6, 130, datetime(2026, 9, 1), 117.0, "Daft Punk — другая дата, остаток 2"),
+
+        # ===== 🆕 5 ГРАНИЧНЫХ ТЕСТОВ =====
+
+        # 1. Дата расчёта — 1-е число месяца
+        (4, 150, datetime(2026, 11, 1), 135.0, "Граница: 1-е число месяца"),
+
+        # 2. Дата расчёта — последний день месяца
+        (4, 150, datetime(2026, 11, 30), 135.0, "Граница: последний день месяца"),
+
+        # 3. Товар с нулевой ценой (скидка не важна — результат 0)
+        (4, 0, datetime(2026, 10, 15), 0.0, "Граница: нулевая цена → 0"),
+
+        # 4. Товар с отрицательным количеством (алгоритм всё равно даст скидку)
+        (4, 150, datetime(2026, 10, 15), 135.0, "Граница: отрицательный остаток"),
+
+        # 5. Скидка 25% по заказам за прошлый месяц (Логика 2)
+        # Товар 4: заказов в сентябре не было → должна быть скидка 25%
+        (4, 150, datetime(2026, 10, 15), 112.5, "Заказов в сентябре нет → 25%"),
     ]
 
     print("=" * 70)
@@ -29,15 +53,20 @@ def run_tests():
 
     passed = 0
     for product_id, price, date, expected, comment in test_cases:
-        result = calculate_price_with_discount(product_id, price, date)
+        # Тест №5 использует вторую логику (по заказам)
+        if "по заказам" in comment or "25%" in comment:
+            result = calculate_price_with_discount_orders(product_id, price, date)
+        else:
+            result = calculate_price_with_discount(product_id, price, date)
+
         status = "✅" if result == expected else "❌"
         if result == expected:
             passed += 1
         print(f"{status} Товар {product_id} на {date.date()}: "
               f"{price} → {result} (ожидалось {expected}) — {comment}")
 
-    print("=" * 70)
-    print(f"Пройдено: {passed} / {len(test_cases)}")
+    print()
+    print_test_report(passed, len(test_cases))
 
 
 if __name__ == "__main__":
