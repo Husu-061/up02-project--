@@ -24,6 +24,8 @@ class Product:
 
         self.price = price
         self.quantity = quantity
+
+    
     def is_available(self) -> bool: 
      return self.quantity > 0
 
@@ -42,7 +44,6 @@ class Product:
         """Цена со скидкой 25% (упрощённо)."""
 
         return self.price * 0.75
-
 
     def indicator(self) -> str:
         if self.quantity > 20:
