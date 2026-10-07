@@ -1,0 +1,51 @@
+* 8d9ad01 (HEAD -> main, origin/main, origin/HEAD) Пара 9: .gitignore и история коммитов
+* 78802c4 Добавлен important.txt, лог и tmp проигнорированы
+* e8635c4 Добавлен .gitignore с правилами для Python
+*   6015e23 Разрешён конфликт README.md после pull
+|\  
+| * af0d378 Изменение README через GitHub
+* | b9e6de4 README: локальное изменение
+|/  
+*   42208fa Merge pull request #2 from Husu-061/feature/homework-8
+|\  
+| * 8931fbc (origin/feature/homework-8) Добавлен файл homework_info.txt в ветке feature/homework-8
+|/  
+*   3671af7 Разрешён конфликт с GitHub                                                                                                                           
+|\                                                                                                                                                               
+| * a4be4a8 Update README.md with changes from GitHub                                                                                                            
+* | d2857a6 Локальное изменение README                                                                                                                           
+|/                                                                                                                                                               
+*   612a04c Merge pull request #1 from Husu-061/feature/remote-test                                                                                              
+|\                                                                                                                                                               
+| * 3523bba (origin/feature/remote-test) Добавлен файл в ветке feature/remote-test                                                                               
+|/                                                                                                                                                               
+* f079ca0 Обновлено описание в README.md                                                                                                                         
+* 62eba22 Добавлен метод is_available                                                                                                                            
+*   43b2750 Разрешён конфликт слияния в README.md                                                                                                                
+|\                                                                                                                                                               
+| * ddc16ec README: изменение в ветке conflict-2                                                                                                                 
+* | b5bfdde README: изменение в ветке main                                                                                                                       
+|/                                                                                                                                                               
+* 6a35c9a Добавлен класс Order с методом order_info                                                                                                              
+*   995bfa8 Разрешён конфликт: скидка 25%                                                                                                                        
+|\         
+
+1. Сколько всего коммитов?
+Всего в проекте более 15 коммитов. Так как я использовал --max-count=20, вывод ограничен 20 последними коммитами. Полное количество можно узнать командой git rev-list --all --count.
+2. Какие коммиты сделаны в ветках?
+В проекте было несколько веток:
+
+feature/discount — коммиты «Добавлен метод discounted_price», «Добавлен файл feature_info.txt».
+
+feature/orders — коммит «Добавлен класс Order с методом order_info».
+
+conflict-2 — коммит «README: изменение в ветке conflict-2».
+
+feature/homework-8 — коммит «Добавлен файл homework_info.txt в ветке feature/homework-8».
+
+Все они были слиты в main
+3. Какие коммиты — последние?
+ 8d9ad01 (HEAD -> main, origin/main, origin/HEAD) Пара 9: .gitignore и история коммитов
+* 78802c4 Добавлен important.txt, лог и tmp проигнорированы
+* e8635c4 Добавлен .gitignore с правилами для Python
+*   6015e23 Разрешён конфликт README.md после pull

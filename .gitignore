@@ -41,3 +41,12 @@ credentials.txt
 # Временные файлы
 *.tmp
 *.bak
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Временные файлы Excel (создаются при открытии книги)
+~$*.xlsx
+
+# Журнал транзакций SQLite
+*.db-journal
