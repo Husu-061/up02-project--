@@ -26,12 +26,17 @@ def create_product_card(parent, product):
     qty         = product[6]
     cover       = product[7]
 
+
     # Подсветка, если товара мало на складе (≤ 3)
-    bg_color = COLOR_HIGHLIGHT if qty <= 3 else "white"
+    bg_color = "#ff8080" if qty <= 3 else "white"
 
     # Карточка — рамка со всех сторон
     card = tk.Frame(parent, bg=bg_color, bd=1, relief="solid")
     card.pack(fill="x", padx=10, pady=5)
+
+    # Добавляем тонкую линию-разделитель под карточкой
+    separator = tk.Frame(parent, height=1, bg="#CCCCCC")
+    separator.pack(fill="x", padx=10, pady=(0, 5))
 
     # === Изображение (слева) ===
     img_frame = tk.Frame(card, bg=bg_color)

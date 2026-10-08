@@ -1,6 +1,7 @@
 """Главное окно приложения с каталогом."""
 import tkinter as tk
 from tkinter import ttk
+from PIL import Image, ImageTk 
 import sqlite3
 
 from config import DB_PATH, FONT_FAMILY
@@ -23,6 +24,18 @@ class CatalogWindow:
         # Заголовок
         header = tk.Frame(self.root, bg="#D2F6E7")
         header.pack(fill="x")
+
+
+        try:
+            logo = Image.open("resources/logo.png").resize((50, 50))
+            logo_photo = ImageTk.PhotoImage(logo)
+            logo_label = tk.Label(header, image=logo_photo, bg="#D2F6E7")
+            logo_label.image = logo_photo  # type: ignore
+            logo_label.pack(side="left", padx=10, pady=10)
+        except Exception as e:
+            print(f"[DEBUG] Логотип не найден: {e}")
+
+
         tk.Label(header, text="КАТАЛОГ ТОВАРОВ",
                  font=(FONT_FAMILY, 16, "bold"),
                  bg="#D2F6E7").pack(pady=15)
