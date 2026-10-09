@@ -1,9 +1,8 @@
 """Каталог товаров (музыкальный магазин)."""
 import tkinter as tk
-import os
 
 from styles import (
-    COLOR_MAIN_BG, COLOR_HIGHLIGHT,
+    COLOR_MAIN_BG, COLOR_SECONDARY_BG, COLOR_HIGHLIGHT,
     FONT_SIZE_NORMAL, FONT_SIZE_HEADER,
     font
 )
@@ -11,13 +10,14 @@ from resources import get_product_image
 from discount import calculate_price_with_discount
 
 
-def create_product_card(parent, product):
+def create_product_card(parent, product, index=0):
     """
-    Создаёт карточку товара по макету.
+    Создаёт карточку товара.
 
     :param parent: родительский контейнер
     :param product: кортеж из БД
         (id, жанр, исполнитель, название, длительность, цена, количество, обложка)
+    :param index: порядковый номер (для чередования фона — Задание А3)
     """
     # ===== Распаковка полей =====
     product_id = product[0]
@@ -29,8 +29,13 @@ def create_product_card(parent, product):
     qty        = product[6]
     cover      = product[7]
 
-    # ===== Подсветка: остаток ≤ 3 → светло-красный =====
-    bg_color = COLOR_HIGHLIGHT if qty <= 3 else COLOR_MAIN_BG
+    # ===== Выбор фона =====
+    # Приоритет: подсветка ≤3 > чередование
+    if qty <= 3:
+        bg_color = COLOR_HIGHLIGHT
+    else:
+        # Чередование: чётные — белый, нечётные — светло-зелёный (А3)
+        bg_color = COLOR_MAIN_BG if index % 2 == 0 else COLOR_SECONDARY_BG
 
     # ===== Карточка =====
     card = tk.Frame(parent, bg=bg_color, bd=1, relief="solid")
@@ -51,7 +56,8 @@ def create_product_card(parent, product):
         img_label.image = photo  # type: ignore
         img_label.pack()
     else:
-        tk.Label(img_frame, text="[НЕТ ФОТО]", bg=bg_color, fg="#888888",
+        # Fallback, если даже заглушка не сгенерировалась
+        tk.Label(img_frame, text="📷\nНет фото", bg=bg_color, fg="#888888",
                  width=10, height=5, font=font(FONT_SIZE_NORMAL)).pack()
 
     # ===== Текстовая часть (справа) =====
@@ -100,7 +106,7 @@ def create_product_card(parent, product):
              font=font(FONT_SIZE_HEADER, bold=True),
              fg=price_color, bg=bg_color, anchor="e").pack(fill="x")
 
-    # ===== Линия-разделитель под карточкой =====
+    # ===== Линия-разделитель =====
     separator = tk.Frame(parent, height=2, bg="#888888")
     separator.pack(fill="x", padx=10, pady=(0, 5))
 
