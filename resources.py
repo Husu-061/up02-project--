@@ -1,49 +1,58 @@
 """Модуль работы с ресурсами."""
 import os
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageTk
 
 
-# Пути к ресурсам
 PATH_PICTURE = "resources/picture.png"
 PATH_LOGO = "resources/logo.png"
 PATH_ICON = "resources/icon.ico"
 
-# Кэш изображений
+# Кэш изображений (Задание А1)
 _image_cache = {}
 
 
-def load_image(path, size=(100, 100)):
-    """
-    Загружает изображение с указанным размером.
+def create_placeholder(size=(100, 100)):
+    """Создаёт заглушку с иконкой фотоаппарата и текстом."""
+    img = Image.new("RGB", size, "#E0E0E0")
+    draw = ImageDraw.Draw(img)
 
-    :param path: путь к файлу
-    :param size: (ширина, высота)
-    :return: ImageTk.PhotoImage или None
-    """
+    # Рисуем "фотоаппарат" (упрощённо)
+    w, h = size
+    # Корпус фотоаппарата
+    draw.rectangle([w * 0.2, h * 0.35, w * 0.8, h * 0.75], outline="#888888", width=2)
+    # Объектив (круг)
+    draw.ellipse([w * 0.4, h * 0.45, w * 0.6, h * 0.65], outline="#888888", width=2)
+    # Вспышка
+    draw.rectangle([w * 0.25, h * 0.28, w * 0.4, h * 0.35], outline="#888888", width=2)
+
+    return img
+
+
+def load_image(path, size=(100, 100)):
+    """Загружает изображение с фиксированным размером (с кэшем)."""
+    key = (path, size)
+    if key in _image_cache:
+        return _image_cache[key]
+
     try:
         if not os.path.exists(path):
             return None
         img = Image.open(path).resize(size)
-        return ImageTk.PhotoImage(img)
+        photo = ImageTk.PhotoImage(img)
+        _image_cache[key] = photo
+        return photo
     except Exception as e:
         print(f"Ошибка загрузки {path}: {e}")
         return None
 
 
 def load_image_proportional(path, max_size=(100, 100)):
-    """
-    Загружает изображение с сохранением пропорций.
-    Используется для логотипа.
-
-    :param path: путь к файлу
-    :param max_size: максимальные (ширина, высота)
-    :return: ImageTk.PhotoImage или None
-    """
+    """Загружает изображение с сохранением пропорций."""
     try:
         if not os.path.exists(path):
             return None
         img = Image.open(path)
-        img.thumbnail(max_size)   # сохраняет пропорции!
+        img.thumbnail(max_size)
         return ImageTk.PhotoImage(img)
     except Exception as e:
         print(f"Ошибка загрузки {path}: {e}")
@@ -52,12 +61,18 @@ def load_image_proportional(path, max_size=(100, 100)):
 
 def get_product_image(image_path, size=(100, 100)):
     """
-    Возвращает картинку товара или заглушку.
-
-    :param image_path: путь к изображению товара
-    :param size: (ширина, высота)
-    :return: ImageTk.PhotoImage
+    Возвращает картинку товара или улучшенную заглушку.
+    Если картинки нет — генерирует заглушку с фотоаппаратом.
     """
-    if not image_path or not os.path.exists(image_path):
-        return load_image(PATH_PICTURE, size)
-    return load_image(image_path, size)
+    if image_path and os.path.exists(image_path):
+        photo = load_image(image_path, size)
+        if photo:
+            return photo
+
+    # Генерируем заглушку
+    try:
+        placeholder = create_placeholder(size)
+        return ImageTk.PhotoImage(placeholder)
+    except Exception as e:
+        print(f"Ошибка создания заглушки: {e}")
+        return None

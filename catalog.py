@@ -51,7 +51,7 @@ def create_product_card(parent, product):
         img_label.image = photo  # type: ignore
         img_label.pack()
     else:
-        tk.Label(img_frame, text="[НЕТ ФОТО]", bg=bg_color,
+        tk.Label(img_frame, text="[НЕТ ФОТО]", bg=bg_color, fg="#888888",
                  width=10, height=5, font=font(FONT_SIZE_NORMAL)).pack()
 
     # ===== Текстовая часть (справа) =====
