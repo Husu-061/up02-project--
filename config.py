@@ -1,4 +1,5 @@
 DB_PATH = "databases/db_variant_23.db"
 
-COLOR_HIGHLIGHT = "#FFE0B2"   # Светло-оранжевый для подсветки
-FONT_FAMILY = "Arial"
+COMPANY_NAME = "МелоМания"   # ваше название магазина
+
+APP_TITLE = f"Музыкальный магазин — {COMPANY_NAME}"
