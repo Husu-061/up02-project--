@@ -1,17 +1,19 @@
-"""Главное окно приложения с каталогом."""
+"""Главное окно с каталогом."""
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog
 from PIL import Image, ImageTk
 import os
 import sqlite3
+import csv
 
 from config import DB_PATH, APP_TITLE
 from styles import (
     COLOR_MAIN_BG, COLOR_SECONDARY_BG, COLOR_ACCENT,
-    FONT_SIZE_NORMAL, FONT_SIZE_TITLE,
+    FONT_SIZE_NORMAL, FONT_SIZE_TITLE, FONT_SIZE_HEADER,
     font
 )
 from catalog import create_product_card
+from utils import format_price, matches_query
 
 
 class CatalogWindow:
@@ -21,14 +23,19 @@ class CatalogWindow:
         self.root.geometry("1200x700")
         self.root.configure(bg=COLOR_MAIN_BG)
 
-        # Иконка приложения
         self.set_icon()
 
-        # Переменные состояния (А1–А5 из пары 10)
+        # Переменные состояния (А7 — сохраняются автоматически)
         self.search_var = tk.StringVar()
         self.category_var = tk.StringVar(value="Все категории")
         self.sort_var = tk.StringVar(value="Без сортировки")
 
+        # Пагинация (А9)
+        self.page_size = 5
+        self.current_page = 0
+        self.filtered_products = []   # текущий отфильтрованный список
+
+        # Привязки
         self.search_var.trace_add("write", lambda *a: self.refresh_catalog())
         self.category_var.trace_add("write", lambda *a: self.refresh_catalog())
         self.sort_var.trace_add("write", lambda *a: self.refresh_catalog())
@@ -36,30 +43,20 @@ class CatalogWindow:
         self.build_ui()
         self.refresh_catalog()
 
-    # ==========================================================
-    #  ИКОНКА ПРИЛОЖЕНИЯ
-    # ==========================================================
     def set_icon(self):
-        """Устанавливает иконку приложения (кроссплатформенно)."""
         try:
-            if os.name == "nt":   # Windows
-                if os.path.exists("resources/icon.ico"):
-                    self.root.iconbitmap("resources/icon.ico")
-            else:                  # Linux / Mac
-                if os.path.exists("resources/logo.png"):
-                    img = Image.open("resources/logo.png")
-                    img.thumbnail((32, 32))
-                    icon_img = ImageTk.PhotoImage(img)
-                    self.root.iconphoto(True, icon_img)
-                    self.root.icon = icon_img  # type: ignore
+            if os.name == "nt" and os.path.exists("resources/icon.ico"):
+                self.root.iconbitmap("resources/icon.ico")
+            elif os.path.exists("resources/logo.png"):
+                img = Image.open("resources/logo.png")
+                img.thumbnail((32, 32))
+                icon_img = ImageTk.PhotoImage(img)
+                self.root.iconphoto(True, icon_img) # type: ignore
+                self.root.icon = icon_img  # type: ignore
         except Exception as e:
             print(f"[DEBUG] Иконка: {e}")
 
-    # ==========================================================
-    #  ЛОГОТИП С ПРОПОРЦИЯМИ
-    # ==========================================================
     def load_logo_proportional(self, path, max_size=(60, 60)):
-        """Загружает логотип с сохранением пропорций."""
         try:
             if not os.path.exists(path):
                 return None
@@ -70,16 +67,13 @@ class CatalogWindow:
             print(f"[DEBUG] Логотип: {e}")
             return None
 
-    # ==========================================================
-    #  ПОСТРОЕНИЕ ИНТЕРФЕЙСА
-    # ==========================================================
+
     def build_ui(self):
-        # ===== ШАПКА =====
         header = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=80)
         header.pack(fill="x")
         header.pack_propagate(False)
 
-        # ===== Логотип (А2 — с возможностью смены) =====
+        # Логотип
         logo = self.load_logo_proportional("resources/logo.png", max_size=(60, 60))
         if logo:
             self.logo_label = tk.Label(header, image=logo, bg=COLOR_SECONDARY_BG)
@@ -94,44 +88,50 @@ class CatalogWindow:
         # Заголовок
         tk.Label(header, text="КАТАЛОГ ТОВАРОВ",
                  font=font(FONT_SIZE_TITLE, bold=True),
-                 bg=COLOR_SECONDARY_BG).pack(side="left", pady=15, padx=(0, 20))
+                 bg=COLOR_SECONDARY_BG).pack(side="left", pady=15, padx=(0, 15))
 
-        # ===== Поиск =====
+        # Поиск
         tk.Label(header, text="🔍", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left")
-        tk.Entry(header, textvariable=self.search_var, width=15,
+        tk.Entry(header, textvariable=self.search_var, width=12,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=5)
 
-        # ===== Фильтр по жанру =====
+        # Жанр
         tk.Label(header, text="Жанр:", bg=COLOR_SECONDARY_BG,
-                 font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(10, 5))
+                 font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(5, 5))
         categories = ["Все категории"] + self.get_categories()
         ttk.Combobox(header, textvariable=self.category_var,
                      values=categories, state="readonly",
-                     width=12).pack(side="left", padx=5)
+                     width=10).pack(side="left", padx=5)
 
-        # ===== Сортировка =====
+        # Сортировка
         tk.Label(header, text="Сорт.:", bg=COLOR_SECONDARY_BG,
-                 font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(10, 5))
+                 font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(5, 5))
         ttk.Combobox(header, textvariable=self.sort_var,
                      values=["Без сортировки", "Цена ↑", "Цена ↓", "Название А-Я"],
-                     state="readonly", width=15).pack(side="left", padx=5)
+                     state="readonly", width=13).pack(side="left", padx=5)
 
-        # ===== Кнопка смены логотипа (А2) =====
-        tk.Button(header, text="🎨 Логотип",
-                  command=self.change_logo,
+        # Экспорт (А5)
+        tk.Button(header, text="📥 CSV",
+                  command=self.export_to_csv,
                   bg=COLOR_ACCENT, fg="white",
                   font=font(FONT_SIZE_NORMAL),
-                  relief="flat", padx=10, pady=3,
-                  cursor="hand2").pack(side="left", padx=5)
+                  relief="flat", padx=8, pady=3,
+                  cursor="hand2").pack(side="left", padx=3)
 
-        # ===== Кнопка тёмной темы (А5) =====
-        tk.Button(header, text="🌙 Тема",
+        # Кнопка темы
+        tk.Button(header, text="🌙",
                   command=self.toggle_theme,
                   bg=COLOR_ACCENT, fg="white",
                   font=font(FONT_SIZE_NORMAL),
-                  relief="flat", padx=10, pady=3,
-                  cursor="hand2").pack(side="left", padx=5)
+                  relief="flat", padx=8, pady=3,
+                  cursor="hand2").pack(side="left", padx=3)
+
+        # Счётчик товаров (А3)
+        self.count_label = tk.Label(header, text="Товаров: 0",
+                                     bg=COLOR_SECONDARY_BG,
+                                     font=font(FONT_SIZE_NORMAL, bold=True))
+        self.count_label.pack(side="right", padx=15)
 
         # ===== ОБЛАСТЬ ПРОКРУТКИ =====
         self.canvas = tk.Canvas(self.root, bg=COLOR_MAIN_BG, highlightthickness=0)
@@ -153,54 +153,45 @@ class CatalogWindow:
         self.canvas.configure(yscrollcommand=scrollbar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+
+        # ===== ПАНЕЛЬ ПАГИНАЦИИ (А9) =====
+        pagination_frame = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=40)
+        pagination_frame.pack(fill="x", side="bottom")
+        pagination_frame.pack_propagate(False)
+
+        tk.Button(pagination_frame, text="◀ Назад",
+                  command=self.prev_page,
+                  bg=COLOR_ACCENT, fg="white",
+                  font=font(FONT_SIZE_NORMAL),
+                  relief="flat", padx=15, pady=3,
+                  cursor="hand2").pack(side="left", padx=10, pady=5)
+
+        self.page_label = tk.Label(pagination_frame, text="Страница 1",
+                                    bg=COLOR_SECONDARY_BG,
+                                    font=font(FONT_SIZE_NORMAL, bold=True))
+        self.page_label.pack(side="left", expand=True)
+
+        tk.Button(pagination_frame, text="Вперёд ▶",
+                  command=self.next_page,
+                  bg=COLOR_ACCENT, fg="white",
+                  font=font(FONT_SIZE_NORMAL),
+                  relief="flat", padx=15, pady=3,
+                  cursor="hand2").pack(side="right", padx=10, pady=5)
 
     def _on_mousewheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-    # ==========================================================
-    #  СМЕНА ЛОГОТИПА (А2)
-    # ==========================================================
-    def change_logo(self):
-        """Меняет логотип циклически между двумя файлами."""
-        logos = ["resources/logo.png", "resources/logo_alt.png"]
-
-        if not hasattr(self, "_current_logo_idx"):
-            self._current_logo_idx = 0
-        self._current_logo_idx = (self._current_logo_idx + 1) % len(logos)
-
-        new_path = logos[self._current_logo_idx]
-        new_logo = self.load_logo_proportional(new_path, max_size=(60, 60))
-        if new_logo:
-            self.logo_label.configure(image=new_logo)
-            self.logo_label.image = new_logo  # type: ignore
-            print(f"[DEBUG] Логотип сменён на: {new_path}")
-        else:
-            print(f"[DEBUG] Не удалось загрузить {new_path}")
-
-    # ==========================================================
-    #  ТЁМНАЯ ТЕМА (А5)
-    # ==========================================================
+  
     def toggle_theme(self):
-        """Переключает светлую и тёмную тему."""
-        current_bg = self.root.cget("bg")
-        if current_bg == COLOR_MAIN_BG:
-            new_bg = "#2E2E2E"
-        else:
-            new_bg = COLOR_MAIN_BG
-
+        current = self.root.cget("bg")
+        new_bg = "#2E2E2E" if current == COLOR_MAIN_BG else COLOR_MAIN_BG
         self.root.configure(bg=new_bg)
         self.canvas.configure(bg=new_bg)
         self.catalog_frame.configure(bg=new_bg)
-        print(f"[DEBUG] Тема переключена: {new_bg}")
-
-        # Перерисовываем карточки с новым фоном
         self.refresh_catalog()
 
-    # ==========================================================
-    #  РАБОТА С БД
-    # ==========================================================
+
     def get_categories(self):
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
@@ -218,13 +209,8 @@ class CatalogWindow:
         conn.close()
         return rows
 
-    # ==========================================================
-    #  ФИЛЬТРАЦИЯ + ПОИСК + СОРТИРОВКА
-    # ==========================================================
     def refresh_catalog(self):
-        for widget in self.catalog_frame.winfo_children():
-            widget.destroy()
-
+        """Применяет фильтры и сортировку, сохраняя состояние (А7)."""
         products = self.get_all_products()
 
         # Фильтр по жанру
@@ -232,99 +218,88 @@ class CatalogWindow:
         if category and category != "Все категории":
             products = [p for p in products if p[1] == category]
 
-        # Поиск
-        query = self.search_var.get().lower().strip()
-        if query:
-            products = [
-                p for p in products
-                if query in (p[2] or "").lower() or query in (p[3] or "").lower()
-            ]
+        # Поиск по нескольким полям (А6)
+        query = self.search_var.get()
+        products = [p for p in products if matches_query(p, query)]
 
-        # Сортировка
+        # Сортировка (А7 — сохраняется через StringVar)
         order = self.sort_var.get()
         if order == "Цена ↑":
-            products.sort(key=lambda p: p[5])
+            products.sort(key=lambda p: p[5] or 0)
         elif order == "Цена ↓":
-            products.sort(key=lambda p: p[5], reverse=True)
+            products.sort(key=lambda p: p[5] or 0, reverse=True)
         elif order == "Название А-Я":
             products.sort(key=lambda p: p[3] or "")
 
-        # Отображаем карточки с чередованием фона (А3)
-        for i, p in enumerate(products):
+        # Обновляем счётчик (А3)
+        self.count_label.config(text=f"Товаров: {len(products)}")
+
+        # Сохраняем и сбрасываем страницу на первую
+        self.filtered_products = products
+        self.current_page = 0
+        self.render_page()
+
+    def render_page(self):
+        """Рисует текущую страницу каталога."""
+        for widget in self.catalog_frame.winfo_children():
+            widget.destroy()
+
+        total = len(self.filtered_products)
+        start = self.current_page * self.page_size
+        end = start + self.page_size
+        page_products = self.filtered_products[start:end]
+
+        for i, p in enumerate(page_products):
             create_product_card(self.catalog_frame, p, index=i)
 
-        if not products:
+        total_pages = max(1, (total + self.page_size - 1) // self.page_size)
+        self.page_label.config(
+            text=f"Страница {self.current_page + 1} из {total_pages} (всего: {total})"
+        )
+
+        if not page_products:
             tk.Label(self.catalog_frame, text="Ничего не найдено",
                      font=font(FONT_SIZE_NORMAL),
                      bg=COLOR_MAIN_BG, fg="gray").pack(pady=50)
+
+    def next_page(self):
+        if (self.current_page + 1) * self.page_size < len(self.filtered_products):
+            self.current_page += 1
+            self.render_page()
+            self.canvas.yview_moveto(0)
+
+    def prev_page(self):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.render_page()
+            self.canvas.yview_moveto(0)
+
+    def export_to_csv(self):
+        """Экспортирует текущий каталог в CSV-файл."""
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+            initialfile="catalog_export.csv"
+        )
+        if not path:
+            return
+
+        try:
+            with open(path, "w", encoding="utf-8-sig", newline="") as f:
+                writer = csv.writer(f, delimiter=";")
+                writer.writerow([
+                    "ID", "Жанр", "Исполнитель", "Название",
+                    "Длительность (сек)", "Цена", "Количество", "Обложка"
+                ])
+                for p in self.filtered_products:
+                    writer.writerow(p)
+            print(f"✅ Экспортировано в {path}")
+        except Exception as e:
+            print(f"❌ Ошибка экспорта: {e}")
 
     def run(self):
         self.root.mainloop()
 
 
-# ==========================================================
-#  ПРОВЕРКА СООТВЕТСТВИЯ КИМ (А4)
-# ==========================================================
-def check_style_compliance():
-    """Проверка соответствия КИМ (ресурсы, шрифт, цвета)."""
-    report = []
-
-    # 1. Ресурсы
-    resources = [
-        ("resources/picture.png", "Заглушка"),
-        ("resources/logo.png", "Логотип"),
-        ("resources/icon.ico", "Иконка"),
-    ]
-    for path, name in resources:
-        if os.path.exists(path):
-            report.append(f"✅ {name} ({path}) — есть")
-        else:
-            report.append(f"❌ {name} ({path}) — ОТСУТСТВУЕТ")
-
-    # 2. Шрифт
-    try:
-        from styles import FONT_FAMILY
-        if FONT_FAMILY == "Calibri":
-            report.append(f"✅ Шрифт: {FONT_FAMILY} (по КИМ)")
-        else:
-            report.append(f"⚠️ Шрифт: {FONT_FAMILY} (ожидается Calibri)")
-    except ImportError:
-        report.append("❌ Модуль styles.py не найден")
-
-    # 3. Цвета
-    try:
-        from styles import (COLOR_MAIN_BG, COLOR_SECONDARY_BG,
-                            COLOR_ACCENT, COLOR_HIGHLIGHT)
-        expected = {
-            "COLOR_MAIN_BG": ("#FFFFFF", COLOR_MAIN_BG),
-            "COLOR_SECONDARY_BG": ("#D2F6E7", COLOR_SECONDARY_BG),
-            "COLOR_ACCENT": ("#70B2AF", COLOR_ACCENT),
-            "COLOR_HIGHLIGHT": ("#ff8080", COLOR_HIGHLIGHT),
-        }
-        for name, (exp, got) in expected.items():
-            if exp.upper() == got.upper():
-                report.append(f"✅ {name}: {got}")
-            else:
-                report.append(f"❌ {name}: {got} (ожидается {exp})")
-    except ImportError:
-        report.append("❌ Не удалось импортировать цвета из styles.py")
-
-    # 4. Папка images
-    if os.path.exists("images"):
-        count = len([f for f in os.listdir("images") if f.endswith(".png")])
-        report.append(f"✅ Папка images/: {count} обложек")
-    else:
-        report.append("⚠️ Папка images/ не найдена")
-
-    # Вывод
-    print("=" * 50)
-    print("ПРОВЕРКА СООТВЕТСТВИЯ КИМ")
-    print("=" * 50)
-    for line in report:
-        print(line)
-    print("=" * 50)
-
-
 if __name__ == "__main__":
-    check_style_compliance()
     CatalogWindow().run()
