@@ -10,9 +10,6 @@ from resources import get_product_image
 from discount import calculate_price_with_discount
 
 
-# ==========================================================
-#  ОСНОВНАЯ ФУНКЦИЯ — только собирает карточку из блоков
-# ==========================================================
 def create_product_card(parent, product, index=0):
     """
     Создаёт карточку товара по макету.
@@ -44,9 +41,6 @@ def create_product_card(parent, product, index=0):
     return card
 
 
-# ==========================================================
-#  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ — каждый блок отвечает за одно
-# ==========================================================
 def _get_card_color(qty, index):
     """
     Определяет цвет фона карточки.
@@ -81,16 +75,16 @@ def _add_image(card, cover, bg_color):
 
 def _add_text_info(card, product_id, genre, artist, title, duration,
                    price, qty, bg_color):
-    """Добавляет текстовую информацию о товаре с проверками крайних случаев."""
+    """Добавляет текстовую информацию с обработкой крайних случаев."""
     text_frame = tk.Frame(card, bg=bg_color)
     text_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
-    # ===== Проверки крайних случаев (Задание 5) =====
-    artist_safe   = artist   if artist   else "[Без исполнителя]"
-    title_safe    = title    if title    else "[Без названия]"
-    genre_safe    = genre    if genre    else "[Без жанра]"
+    # ===== Проверки крайних случаев (Задание 5 + ДЗ) =====
+    artist_safe   = artist if artist else "[Без исполнителя]"
+    title_safe    = _truncate_title(title, max_length=60)   # обрезка длинных
+    genre_safe    = genre  if genre  else "[Без жанра]"
     duration_safe = duration if duration is not None else 0
-    price_safe    = price    if price    is not None else 0
+    price_safe    = _safe_price(price)                       # защита от None
 
     # Исполнитель | Название — жирным
     _add_label(text_frame, f"{artist_safe} | {title_safe}",
@@ -119,15 +113,21 @@ def _add_label(parent, text, bg_color, bold=False,
 
 
 def _add_price_label(parent, product_id, price, bg_color):
-    """Добавляет цену с учётом скидки."""
+    """Добавляет цену с учётом скидки и больших чисел."""
     final_price = calculate_price_with_discount(product_id, price)
+
+    # Форматирование: для больших цен — с разделителями тысяч
+    if final_price >= 1_000_000:
+        price_str = f"{final_price:,.0f}"       # 1 500 000
+    else:
+        price_str = f"{final_price:.2f}"        # 135.00
 
     if final_price < price:
         # Скидка применена — красным
-        text = f"{final_price:.2f} руб. (скидка!)"
+        text = f"{price_str} руб. (скидка!)"
         color = "red"
     else:
-        text = f"{price:.2f} руб."
+        text = f"{price_str} руб."
         color = "black"
 
     tk.Label(parent, text=text, font=font(FONT_SIZE_HEADER, bold=True),
@@ -161,3 +161,22 @@ def _format_duration(seconds):
     minutes = seconds // 60
     secs = seconds % 60
     return f"{minutes}:{secs:02d}"
+
+
+def _safe_price(price):
+    """Возвращает безопасную цену (не None, не отрицательную)."""
+    if price is None or price < 0:
+        return 0
+    return price
+
+
+def _truncate_title(title, max_length=60):
+    """
+    Обрезает длинное название до max_length символов.
+    Добавляет '…' в конце, если название обрезано.
+    """
+    if not title:
+        return "[Без названия]"
+    if len(title) <= max_length:
+        return title
+    return title[:max_length - 1] + "…"
