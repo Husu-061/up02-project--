@@ -2,7 +2,7 @@
 import tkinter as tk
 
 from styles import (
-    COLOR_MAIN_BG, COLOR_SECONDARY_BG, COLOR_HIGHLIGHT,
+    COLOR_MAIN_BG, COLOR_SECONDARY_BG, COLOR_HIGHLIGHT, COLOR_ACCENT,
     FONT_SIZE_NORMAL, FONT_SIZE_HEADER,
     font
 )
@@ -12,33 +12,87 @@ from utils import format_price
 
 
 class ToolTip:
-    """Всплывающая подсказка при наведении на карточку."""
+    """
+    Единый Tooltip для всего приложения.
+
+    Особенности:
+    - Показывает подсказку через 400 мс после наведения (задержка).
+    - Гарантирует, что одновременно активен только ОДИН Tooltip.
+    - Корректно закрывается при уходе мыши.
+    """
+    _current_tip = None   # глобальный трекер активного Tooltip
 
     def __init__(self, widget, text):
         self.widget = widget
         self.text = text
         self.tip = None
-        widget.bind("<Enter>", self.show)
-        widget.bind("<Leave>", self.hide)
+        self._after_id = None
 
-    def show(self, event=None):
+        widget.bind("<Enter>", self._on_enter)
+        widget.bind("<Leave>", self._on_leave)
+
+    def _on_enter(self, event=None):
+        """Запускает таймер показа Tooltip."""
+        self._cancel_timer()
+        self._after_id = self.widget.after(400, self._show)
+
+    def _on_leave(self, event=None):
+        """Отменяет таймер и скрывает Tooltip."""
+        self._cancel_timer()
+        self._hide()
+
+    def _cancel_timer(self):
+        """Отменяет отложенный показ, если он ещё не сработал."""
+        if self._after_id:
+            try:
+                self.widget.after_cancel(self._after_id)
+            except Exception:
+                pass
+            self._after_id = None
+
+    def _show(self):
+        """Показывает Tooltip (закрывая предыдущий)."""
+        # Закрываем предыдущий активный Tooltip
+        if ToolTip._current_tip:
+            try:
+                ToolTip._current_tip.destroy()
+            except tk.TclError:
+                pass
+            ToolTip._current_tip = None
+
+        # Закрываем свой, если уже показан
+        if self.tip:
+            return
+
         x = self.widget.winfo_rootx() + 20
         y = self.widget.winfo_rooty() + 20
+
         self.tip = tk.Toplevel(self.widget)
         self.tip.wm_overrideredirect(True)
         self.tip.geometry(f"+{x}+{y}")
-        tk.Label(self.tip, text=self.text, background="lightyellow",
-                 relief="solid", borderwidth=1,
-                 font=font(FONT_SIZE_NORMAL)).pack()
 
-    def hide(self, event=None):
+        tk.Label(self.tip, text=self.text,
+                 background="lightyellow",
+                 relief="solid", borderwidth=1,
+                 font=font(FONT_SIZE_NORMAL),
+                 justify="left").pack()
+
+        ToolTip._current_tip = self.tip
+
+    def _hide(self):
+        """Скрывает Tooltip."""
         if self.tip:
-            self.tip.destroy()
+            try:
+                self.tip.destroy()
+            except tk.TclError:
+                pass
+            if ToolTip._current_tip is self.tip:
+                ToolTip._current_tip = None
             self.tip = None
 
 
 def create_product_card(parent, product, index=0):
-    """Создаёт карточку товара по макету."""
+
     product_id, genre, artist, title, duration, price, qty, cover = product
     qty_safe = qty if qty is not None else 0
     bg_color = _get_card_color(qty_safe, index)
@@ -49,10 +103,10 @@ def create_product_card(parent, product, index=0):
     _add_image(card, cover, bg_color)
     _add_text_info(card, product_id, genre, artist, title, duration,
                    price, qty_safe, bg_color)
-
+    _add_indicator_column(card, qty_safe, bg_color)      # А5 + А2 + А6
     _add_separator(parent)
 
-    # Tooltip (А2) — полная информация при наведении
+    # Tooltip
     tooltip_text = (
         f"Исполнитель: {artist or '[не указан]'}\n"
         f"Название: {title or '[не указано]'}\n"
@@ -64,13 +118,17 @@ def create_product_card(parent, product, index=0):
 
     return card
 
+
+
 def _get_card_color(qty, index):
+    """Цвет фона: подсветка ≤3 или чередование."""
     if qty <= 3:
         return COLOR_HIGHLIGHT
     return COLOR_MAIN_BG if index % 2 == 0 else COLOR_SECONDARY_BG
 
 
 def _add_image(card, cover, bg_color):
+    """Изображение товара или заглушка."""
     img_frame = tk.Frame(card, bg=bg_color)
     img_frame.pack(side="left", padx=10, pady=10)
 
@@ -87,9 +145,11 @@ def _add_image(card, cover, bg_color):
 
 def _add_text_info(card, product_id, genre, artist, title, duration,
                    price, qty, bg_color):
+    """Текстовая информация (без количества — оно в отдельной колонке)."""
     text_frame = tk.Frame(card, bg=bg_color)
     text_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
+    # Проверки крайних случаев
     artist_safe   = artist if artist else "[Без исполнителя]"
     title_safe    = _truncate_title(title, max_length=60)
     genre_safe    = genre  if genre  else "[Без жанра]"
@@ -99,19 +159,50 @@ def _add_text_info(card, product_id, genre, artist, title, duration,
     _add_label(text_frame, f"{artist_safe} | {title_safe}",
                bg_color, bold=True, size=FONT_SIZE_HEADER)
     _add_label(text_frame, f"Жанр: {genre_safe}", bg_color)
-    _add_label(text_frame, f"Количество: {_indicator(qty)} ({qty} шт.)", bg_color)
-    _add_label(text_frame, f"Длительность: {_format_duration(duration_safe)}", bg_color)
+    _add_label(text_frame, f"Длительность: {_format_duration(duration_safe)}",
+               bg_color)
     _add_price_label(text_frame, product_id, price_safe, bg_color)
+
+
+def _add_indicator_column(card, qty, bg_color):
+    """
+    Индикатор в отдельной колонке справа (Задание А5).
+    Цветной (А2) + с иконкой (А6).
+    """
+    indicator_frame = tk.Frame(card, bg=bg_color, width=110)
+    indicator_frame.pack(side="right", padx=10, pady=10)
+
+    indicator_text = _indicator(qty)
+    indicator_color = _get_indicator_color(qty)
+    indicator_icon = _get_indicator_icon(qty)
+
+    print(f"[DEBUG] qty={qty}, text='{indicator_text}', icon='{indicator_icon}'")
+
+    # Иконка (А6)
+    tk.Label(indicator_frame, text=indicator_icon,
+             font=font(FONT_SIZE_HEADER + 6),
+             bg=bg_color).pack()
+
+    # Название индикатора — цветное (А2)
+    tk.Label(indicator_frame, text=indicator_text,
+             font=font(FONT_SIZE_HEADER, bold=True),
+             fg=indicator_color, bg=bg_color).pack()
+
+    # Количество
+    tk.Label(indicator_frame, text=f"({qty} шт.)",
+             font=font(FONT_SIZE_NORMAL),
+             bg=bg_color).pack()
 
 
 def _add_label(parent, text, bg_color, bold=False,
                size=FONT_SIZE_NORMAL, align=tk.W):
+    """Метка с текстом."""
     tk.Label(parent, text=text, font=font(size, bold=bold),
              bg=bg_color, anchor=align).pack(fill="x")  # type: ignore
 
 
 def _add_price_label(parent, product_id, price, bg_color):
-    """Добавляет цену с учётом скидки и разделителями тысяч (А1)."""
+    """Цена со скидкой + разделители тысяч (А1 из прошлой пары)."""
     final_price = calculate_price_with_discount(product_id, price)
     price_str = format_price(final_price)
 
@@ -131,13 +222,42 @@ def _add_separator(parent):
     separator.pack(fill="x", padx=10, pady=(0, 5))
 
 
+
 def _indicator(qty):
+    """Индикатор количества (3 уровня)."""
     if qty > 20:
-        return "🟢 много"
+        return "много"
     elif qty > 5:
-        return "🟡 средне"
+        return "средне"
     else:
-        return "🔴 мало"
+        return "мало"
+
+
+def _get_indicator_color(qty):
+    """
+    Цвет индикатора (Задание А2).
+    ≤3 — красный, 4–5 — оранжевый, >5 — зелёный (акцент).
+    """
+    if qty <= 3:
+        return "#ff8080"     # красный
+    elif qty <= 5:
+        return "#FFA500"     # оранжевый
+    else:
+        return COLOR_ACCENT  # зелёный (#70B2AF)
+
+
+def _get_indicator_icon(qty):
+    """
+    Иконка индикатора (Задание А6).
+    >20 — ✅, 6–20 — ⚠️, ≤5 — ❌.
+    """
+    if qty > 20:
+        return "✅"
+    elif qty > 5:
+        return "⚠️"
+    else:
+        return "❌"
+
 
 
 def _format_duration(seconds):
