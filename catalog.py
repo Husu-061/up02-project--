@@ -12,15 +12,9 @@ from utils import format_price
 
 
 class ToolTip:
-    """
-    Единый Tooltip для всего приложения.
+    """Всплывающая подсказка при наведении на карточку."""
 
-    Особенности:
-    - Показывает подсказку через 400 мс после наведения (задержка).
-    - Гарантирует, что одновременно активен только ОДИН Tooltip.
-    - Корректно закрывается при уходе мыши.
-    """
-    _current_tip = None   # глобальный трекер активного Tooltip
+    _current_tip = None
 
     def __init__(self, widget, text):
         self.widget = widget
@@ -32,17 +26,14 @@ class ToolTip:
         widget.bind("<Leave>", self._on_leave)
 
     def _on_enter(self, event=None):
-        """Запускает таймер показа Tooltip."""
         self._cancel_timer()
         self._after_id = self.widget.after(400, self._show)
 
     def _on_leave(self, event=None):
-        """Отменяет таймер и скрывает Tooltip."""
         self._cancel_timer()
         self._hide()
 
     def _cancel_timer(self):
-        """Отменяет отложенный показ, если он ещё не сработал."""
         if self._after_id:
             try:
                 self.widget.after_cancel(self._after_id)
@@ -51,8 +42,6 @@ class ToolTip:
             self._after_id = None
 
     def _show(self):
-        """Показывает Tooltip (закрывая предыдущий)."""
-        # Закрываем предыдущий активный Tooltip
         if ToolTip._current_tip:
             try:
                 ToolTip._current_tip.destroy()
@@ -60,7 +49,6 @@ class ToolTip:
                 pass
             ToolTip._current_tip = None
 
-        # Закрываем свой, если уже показан
         if self.tip:
             return
 
@@ -80,7 +68,6 @@ class ToolTip:
         ToolTip._current_tip = self.tip
 
     def _hide(self):
-        """Скрывает Tooltip."""
         if self.tip:
             try:
                 self.tip.destroy()
@@ -91,8 +78,9 @@ class ToolTip:
             self.tip = None
 
 
-def create_product_card(parent, product, index=0):
 
+def create_product_card(parent, product, index=0):
+    """Создаёт карточку товара по макету."""
     product_id, genre, artist, title, duration, price, qty, cover = product
     qty_safe = qty if qty is not None else 0
     bg_color = _get_card_color(qty_safe, index)
@@ -103,7 +91,10 @@ def create_product_card(parent, product, index=0):
     _add_image(card, cover, bg_color)
     _add_text_info(card, product_id, genre, artist, title, duration,
                    price, qty_safe, bg_color)
-    _add_indicator_column(card, qty_safe, bg_color)      # А5 + А2 + А6
+    _add_indicator_column(card, qty_safe, bg_color)
+    _add_separator(parent)
+
+    # Tooltip
     _add_separator(parent)
 
     # Tooltip
@@ -116,8 +107,21 @@ def create_product_card(parent, product, index=0):
     )
     ToolTip(card, tooltip_text)
 
+    # ===== Рекурсивная привязка клика =====
+    _bind_click_recursive(card, parent, product)
+
+    card.bind("<Enter>", lambda e: card.configure(cursor="hand2"))
+    card.bind("<Leave>", lambda e: card.configure(cursor=""))
+
     return card
 
+
+def _bind_click_recursive(widget, parent, product):
+    """Рекурсивно привязывает клик ко всем вложенным виджетам."""
+    widget.bind("<Button-1>", lambda e: _open_view(parent, product))
+
+    for child in widget.winfo_children():
+        _bind_click_recursive(child, parent, product)
 
 
 def _get_card_color(qty, index):
@@ -145,11 +149,10 @@ def _add_image(card, cover, bg_color):
 
 def _add_text_info(card, product_id, genre, artist, title, duration,
                    price, qty, bg_color):
-    """Текстовая информация (без количества — оно в отдельной колонке)."""
+    """Текстовая информация с проверками крайних случаев."""
     text_frame = tk.Frame(card, bg=bg_color)
     text_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
-    # Проверки крайних случаев
     artist_safe   = artist if artist else "[Без исполнителя]"
     title_safe    = _truncate_title(title, max_length=60)
     genre_safe    = genre  if genre  else "[Без жанра]"
@@ -165,28 +168,22 @@ def _add_text_info(card, product_id, genre, artist, title, duration,
 
 
 def _add_indicator_column(card, qty, bg_color):
-    """
-    Индикатор в отдельной колонке справа (Задание А5).
-    Цветной (А2) + с иконкой (А6).
-    """
-    indicator_frame = tk.Frame(card, bg=bg_color, width=110)
-    indicator_frame.pack(side="right", padx=10, pady=10)
+    """Индикатор в отдельной колонке справа."""
+    indicator_frame = tk.Frame(card, bg=bg_color)
+    indicator_frame.pack(side="right", padx=15, pady=10)
 
-    indicator_text = _indicator(qty)
+    indicator_text  = _indicator(qty)
     indicator_color = _get_indicator_color(qty)
-    indicator_icon = _get_indicator_icon(qty)
+    indicator_icon  = _get_indicator_icon(qty)
 
-    # Иконка (А6)
     tk.Label(indicator_frame, text=indicator_icon,
              font=font(FONT_SIZE_HEADER + 6),
              bg=bg_color).pack()
 
-    # Название индикатора — цветное (А2)
     tk.Label(indicator_frame, text=indicator_text,
              font=font(FONT_SIZE_HEADER, bold=True),
              fg=indicator_color, bg=bg_color).pack()
 
-    # Количество
     tk.Label(indicator_frame, text=f"({qty} шт.)",
              font=font(FONT_SIZE_NORMAL),
              bg=bg_color).pack()
@@ -200,7 +197,7 @@ def _add_label(parent, text, bg_color, bold=False,
 
 
 def _add_price_label(parent, product_id, price, bg_color):
-    """Цена со скидкой + разделители тысяч (А1 из прошлой пары)."""
+    """Цена со скидкой + разделители тысяч."""
     final_price = calculate_price_with_discount(product_id, price)
     price_str = format_price(final_price)
 
@@ -220,39 +217,19 @@ def _add_separator(parent):
     separator.pack(fill="x", padx=10, pady=(0, 5))
 
 
-
 def _indicator(qty):
-    """
-    Индикатор количества на складе.
-    
-    >20     → «много»
-    6–20    → «средне»
-    ≤5      → «мало»
-    
-    Защита от плохих данных:
-    - None  → «мало» (считаем как 0)
-    - str   → пытаемся преобразовать в число
-    - float → округляем
-    """
-    # Защита от None
+    """Индикатор количества (3 уровня) с защитой от плохих данных."""
     if qty is None:
         return "мало"
-
-    # Защита от строки — пробуем преобразовать
     if isinstance(qty, str):
         try:
             qty = float(qty)
         except (ValueError, TypeError):
             return "мало"
-
-    # Защита от неподходящих типов
     if not isinstance(qty, (int, float)):
         return "мало"
-
-    # Округляем дробное до целого
     qty = int(qty)
 
-    # Основная логика
     if qty > 20:
         return "много"
     elif qty > 5:
@@ -262,23 +239,17 @@ def _indicator(qty):
 
 
 def _get_indicator_color(qty):
-    """
-    Цвет индикатора (Задание А2).
-    ≤3 — красный, 4–5 — оранжевый, >5 — зелёный (акцент).
-    """
+    """Цвет индикатора: ≤3 — красный, 4–5 — оранжевый, >5 — акцентный."""
     if qty <= 3:
-        return "#ff8080"     # красный
+        return "#ff8080"
     elif qty <= 5:
-        return "#FFA500"     # оранжевый
+        return "#FFA500"
     else:
-        return COLOR_ACCENT  # зелёный (#70B2AF)
+        return COLOR_ACCENT
 
 
 def _get_indicator_icon(qty):
-    """
-    Иконка индикатора (Задание А6).
-    >20 — ✅, 6–20 — ⚠️, ≤5 — ❌.
-    """
+    """Иконка: >20 ✅, 6–20 ⚠️, ≤5 ❌."""
     if qty > 20:
         return "✅"
     elif qty > 5:
@@ -306,3 +277,28 @@ def _truncate_title(title, max_length=60):
     if len(title) <= max_length:
         return title
     return title[:max_length - 1] + "…"
+
+
+
+def _open_view(parent, product):
+    """
+    Открывает форму просмотра товара при клике на карточку.
+
+    :param parent: виджет-родитель (карточка)
+    :param product: кортеж с данными товара
+    """
+    try:
+        from view_form import ViewForm
+
+        # Находим корневое окно
+        root = parent.winfo_toplevel()
+
+        # Пытаемся найти callback add_to_order в главном окне
+        callback = getattr(root, "add_to_order", None)
+
+        ViewForm(root, product, on_add_to_order=callback)
+
+    except Exception as e:
+        print(f"[DEBUG] Ошибка открытия формы: {e}")
+        import traceback
+        traceback.print_exc()
