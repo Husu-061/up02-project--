@@ -1,6 +1,5 @@
 """Тестирование каталога (интеграционные тесты с БД)."""
 import sqlite3
-import os
 from config import DB_PATH
 
 
@@ -14,11 +13,7 @@ def get_all_products():
     return rows
 
 
-# ==========================================================
-#  ТЕСТЫ
-# ==========================================================
 def test_db_available():
-    """БД доступна — get_all_products() возвращает список."""
     try:
         products = get_all_products()
         return isinstance(products, list)
@@ -28,13 +23,11 @@ def test_db_available():
 
 
 def test_products_count():
-    """Товары загружены — количество > 0."""
     products = get_all_products()
     return len(products) > 0
 
 
 def test_product_fields():
-    """У всех товаров минимум 8 полей."""
     products = get_all_products()
     for p in products:
         if len(p) < 8:
@@ -44,7 +37,6 @@ def test_product_fields():
 
 
 def test_prices_are_numbers():
-    """Все цены — числа (int или float)."""
     products = get_all_products()
     for p in products:
         if not isinstance(p[5], (int, float)):
@@ -54,7 +46,6 @@ def test_prices_are_numbers():
 
 
 def test_quantity_not_negative():
-    """Количество не отрицательное."""
     products = get_all_products()
     for p in products:
         if p[6] is not None and p[6] < 0:
@@ -63,43 +54,37 @@ def test_quantity_not_negative():
     return True
 
 
-# ==========================================================
-#  НОВЫЙ ТЕСТ (Задание 6.6)
-# ==========================================================
 def test_names_not_empty():
-    """Проверяет, что у всех товаров есть название (не пустое)."""
     products = get_all_products()
     for p in products:
-        # p[3] — название в вашей БД
         if not p[3]:
             print(f"❌ Товар id={p[0]}: пустое название")
             return False
     return True
 
 
-def test_images_available():
-    """Проверяет, что хотя бы у одного товара есть обложка."""
+def test_has_images():
+    """Хотя бы у одного товара есть изображение (обложка в БД)."""
     products = get_all_products()
-    count = sum(1 for p in products if p[7])
-    if count > 0:
-        print(f"   Обложек в БД: {count} из {len(products)}")
+    with_images = [p for p in products if p[7]]
+
+    if len(with_images) > 0:
+        print(f"   Товаров с обложкой: {len(with_images)} из {len(products)}")
         return True
-    return False
+    else:
+        print(f"❌ Ни у одного товара нет обложки")
+        return False
 
 
-# ==========================================================
-#  ЗАПУСК ВСЕХ ТЕСТОВ
-# ==========================================================
 def run_all_tests():
-    """Прогон всех тестов каталога."""
     tests = [
         ("БД доступна", test_db_available),
         ("Товары загружены", test_products_count),
         ("У всех товаров нужные поля", test_product_fields),
         ("Все цены — числа", test_prices_are_numbers),
         ("Количество не отрицательное", test_quantity_not_negative),
-        ("У всех товаров есть название", test_names_not_empty),         # ← новый
-        ("Хотя бы одна обложка есть", test_images_available),           # ← бонус
+        ("У всех товаров есть название", test_names_not_empty),
+        ("Хотя бы у одного есть изображение", test_has_images),   # ← новый
     ]
 
     print("=" * 60)

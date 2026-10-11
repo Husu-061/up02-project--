@@ -222,7 +222,37 @@ def _add_separator(parent):
 
 
 def _indicator(qty):
-    """Индикатор количества (3 уровня)."""
+    """
+    Индикатор количества на складе.
+    
+    >20     → «много»
+    6–20    → «средне»
+    ≤5      → «мало»
+    
+    Защита от плохих данных:
+    - None  → «мало» (считаем как 0)
+    - str   → пытаемся преобразовать в число
+    - float → округляем
+    """
+    # Защита от None
+    if qty is None:
+        return "мало"
+
+    # Защита от строки — пробуем преобразовать
+    if isinstance(qty, str):
+        try:
+            qty = float(qty)
+        except (ValueError, TypeError):
+            return "мало"
+
+    # Защита от неподходящих типов
+    if not isinstance(qty, (int, float)):
+        return "мало"
+
+    # Округляем дробное до целого
+    qty = int(qty)
+
+    # Основная логика
     if qty > 20:
         return "много"
     elif qty > 5:
