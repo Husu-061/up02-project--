@@ -15,7 +15,6 @@ from styles import (
 from catalog import create_product_card
 from utils import format_price, matches_query
 
-
 class CatalogWindow:
     def __init__(self):
         self.root = tk.Tk()

@@ -3,10 +3,6 @@ import sqlite3
 import os
 from config import DB_PATH
 
-
-# ==========================================================
-#  ПОДКЛЮЧЕНИЕ К БД
-# ==========================================================
 def get_products():
     """Возвращает все товары из БД."""
     conn = sqlite3.connect(DB_PATH)
@@ -138,7 +134,7 @@ def test_long_titles():
     found = False
 
     for p in products:
-        title = p[3] or ""   # индекс названия
+        title = p[3] or ""   
         if len(title) > 100:
             found = True
             print(f"⚠️ Товар id={p[0]}: название длиной {len(title)} символов")
@@ -156,7 +152,6 @@ def test_cyrillic_titles():
 
     for p in products:
         title = p[3] or ""
-        # Проверяем, есть ли кириллица в названии
         if any("а" <= ch.lower() <= "я" for ch in title):
             found += 1
 
