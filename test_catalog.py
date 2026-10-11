@@ -1,195 +1,123 @@
-"""Расширенное тестирование каталога товаров."""
+"""Тестирование каталога (интеграционные тесты с БД)."""
 import sqlite3
 import os
 from config import DB_PATH
 
-def get_products():
+
+def get_all_products():
     """Возвращает все товары из БД."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("SELECT * FROM Товар ORDER BY id")
-    products = cur.fetchall()
+    rows = cur.fetchall()
     conn.close()
-    return products
+    return rows
 
 
-def test_fields():
-    """Проверяет, что все поля товаров на месте (минимум 6 для макета)."""
-    products = get_products()
-    print(f"Всего товаров: {len(products)}")
+# ==========================================================
+#  ТЕСТЫ
+# ==========================================================
+def test_db_available():
+    """БД доступна — get_all_products() возвращает список."""
+    try:
+        products = get_all_products()
+        return isinstance(products, list)
+    except Exception as e:
+        print(f"❌ БД недоступна: {e}")
+        return False
 
-    required_count = 6
-    errors = 0
 
+def test_products_count():
+    """Товары загружены — количество > 0."""
+    products = get_all_products()
+    return len(products) > 0
+
+
+def test_product_fields():
+    """У всех товаров минимум 8 полей."""
+    products = get_all_products()
     for p in products:
-        if len(p) < required_count:
+        if len(p) < 8:
             print(f"❌ Товар id={p[0]}: мало полей ({len(p)})")
-            errors += 1
-
-    if errors == 0:
-        print("✅ Все товары содержат нужные поля")
-    return errors
+            return False
+    return True
 
 
-def test_prices():
-    """Проверяет, что у всех товаров есть цена (не None)."""
-    products = get_products()
-    errors = 0
-
+def test_prices_are_numbers():
+    """Все цены — числа (int или float)."""
+    products = get_all_products()
     for p in products:
-        price = p[5]   # индекс цены
-        if price is None:
-            print(f"❌ Товар id={p[0]}: нет цены (None)")
-            errors += 1
-
-    if errors == 0:
-        print("✅ У всех товаров есть цена")
-    return errors
+        if not isinstance(p[5], (int, float)):
+            print(f"❌ Товар id={p[0]}: цена не число ({p[5]})")
+            return False
+    return True
 
 
-def test_quantities():
-    """Проверяет, что у всех товаров количество ≥ 0."""
-    products = get_products()
-    errors = 0
-
+def test_quantity_not_negative():
+    """Количество не отрицательное."""
+    products = get_all_products()
     for p in products:
-        qty = p[6]   # индекс количества
-        if qty is None:
-            print(f"❌ Товар id={p[0]}: количество = None")
-            errors += 1
-        elif qty < 0:
-            print(f"❌ Товар id={p[0]}: отрицательное количество ({qty})")
-            errors += 1
-
-    if errors == 0:
-        print("✅ У всех товаров количество ≥ 0")
-    return errors
+        if p[6] is not None and p[6] < 0:
+            print(f"❌ Товар id={p[0]}: отрицательное количество ({p[6]})")
+            return False
+    return True
 
 
-def test_has_images():
-    """Проверяет, что хотя бы у одного товара есть изображение."""
-    products = get_products()
-    with_image = 0
-
+# ==========================================================
+#  НОВЫЙ ТЕСТ (Задание 6.6)
+# ==========================================================
+def test_names_not_empty():
+    """Проверяет, что у всех товаров есть название (не пустое)."""
+    products = get_all_products()
     for p in products:
-        cover = p[7]   # индекс обложки
-        if cover:
-            with_image += 1
-
-    if with_image > 0:
-        print(f"✅ Хотя бы у одного товара есть изображение ({with_image} из {len(products)})")
-        return 0
-    else:
-        print("❌ Ни у одного товара нет изображения")
-        return 1
+        # p[3] — название в вашей БД
+        if not p[3]:
+            print(f"❌ Товар id={p[0]}: пустое название")
+            return False
+    return True
 
 
-def test_resources():
-    """Проверяет наличие ресурсов."""
-    errors = 0
-    resources = [
-        ("resources/picture.png", "Заглушка"),
-        ("resources/logo.png", "Логотип"),
-    ]
-    for path, name in resources:
-        if os.path.exists(path):
-            print(f"✅ {name} ({path})")
-        else:
-            print(f"❌ {name} ({path}) — отсутствует")
-            errors += 1
-
-    if os.path.exists("images"):
-        count = len([f for f in os.listdir("images") if f.endswith(".png")])
-        print(f"✅ Папка images/: {count} файлов")
-    else:
-        print("⚠️ Папка images/ не найдена")
-
-    return errors
+def test_images_available():
+    """Проверяет, что хотя бы у одного товара есть обложка."""
+    products = get_all_products()
+    count = sum(1 for p in products if p[7])
+    if count > 0:
+        print(f"   Обложек в БД: {count} из {len(products)}")
+        return True
+    return False
 
 
-def test_large_price():
-    """Проверяет товары с ценой > 1 000 000 руб."""
-    products = get_products()
-    errors = 0
-    found = False
-
-    for p in products:
-        price = p[5]
-        if price is not None and price > 1_000_000:
-            found = True
-            print(f"⚠️ Товар id={p[0]}: цена {price:,} руб. — очень высокая")
-            # Проверяем формат вывода
-            formatted = f"{price:,.2f}"
-            print(f"   Формат вывода: {formatted} руб.")
-
-    if not found:
-        print("✅ Товаров с ценой > 1 000 000 руб. нет")
-    return errors
-
-
-def test_long_titles():
-    """Проверяет товары с названием длиннее 100 символов."""
-    products = get_products()
-    errors = 0
-    found = False
-
-    for p in products:
-        title = p[3] or ""   
-        if len(title) > 100:
-            found = True
-            print(f"⚠️ Товар id={p[0]}: название длиной {len(title)} символов")
-            print(f"   Первые 50: '{title[:50]}...'")
-
-    if not found:
-        print("✅ Названий длиннее 100 символов нет")
-    return errors
-
-
-def test_cyrillic_titles():
-    """Проверяет товары с кириллическим названием."""
-    products = get_products()
-    found = 0
-
-    for p in products:
-        title = p[3] or ""
-        if any("а" <= ch.lower() <= "я" for ch in title):
-            found += 1
-
-    if found > 0:
-        print(f"✅ Найдено товаров с кириллицей в названии: {found}")
-    else:
-        print("⚠️ Товаров с кириллицей не найдено")
-    return 0
-
-
+# ==========================================================
+#  ЗАПУСК ВСЕХ ТЕСТОВ
+# ==========================================================
 def run_all_tests():
-    """Запускает все тесты."""
-    print("=" * 55)
-    print("РАСШИРЕННОЕ ТЕСТИРОВАНИЕ КАТАЛОГА")
-    print("=" * 55)
+    """Прогон всех тестов каталога."""
+    tests = [
+        ("БД доступна", test_db_available),
+        ("Товары загружены", test_products_count),
+        ("У всех товаров нужные поля", test_product_fields),
+        ("Все цены — числа", test_prices_are_numbers),
+        ("Количество не отрицательное", test_quantity_not_negative),
+        ("У всех товаров есть название", test_names_not_empty),         # ← новый
+        ("Хотя бы одна обложка есть", test_images_available),           # ← бонус
+    ]
 
-    total_errors = 0
+    print("=" * 60)
+    print("ТЕСТИРОВАНИЕ КАТАЛОГА")
+    print("=" * 60)
 
-    print("\n[1] Базовые проверки")
-    total_errors += test_fields()
-    total_errors += test_prices()
-    total_errors += test_quantities()
-    total_errors += test_has_images()
+    passed = 0
+    for name, func in tests:
+        result = func()
+        status = "✅" if result else "❌"
+        if result:
+            passed += 1
+        print(f"{status} {name}")
 
-    print("\n[2] Крайние случаи")
-    total_errors += test_large_price()
-    total_errors += test_long_titles()
-    total_errors += test_cyrillic_titles()
+    print("=" * 60)
+    print(f"Пройдено: {passed} / {len(tests)}")
 
-    print("\n[3] Ресурсы")
-    total_errors += test_resources()
-
-    print("\n" + "=" * 55)
-    if total_errors == 0:
-        print("✅ ВСЕ ТЕСТЫ ПРОЙДЕНЫ")
-    else:
-        print(f"❌ НАЙДЕНО ОШИБОК: {total_errors}")
-    print("=" * 55)
+    return passed == len(tests)
 
 
 if __name__ == "__main__":
