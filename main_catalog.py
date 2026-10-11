@@ -14,7 +14,7 @@ from styles import (
 )
 from catalog import create_product_card
 from utils import format_price, matches_query
-from error_handler import safe_call       # ← Задание 6.2
+from error_handler import safe_call
 from logger import logger
 
 
@@ -30,17 +30,14 @@ class CatalogWindow:
 
         self.set_icon()
 
-        # Переменные состояния
         self.search_var = tk.StringVar()
         self.category_var = tk.StringVar(value="Все категории")
         self.sort_var = tk.StringVar(value="Без сортировки")
 
-        # Пагинация
         self.page_size = 5
         self.current_page = 0
         self.filtered_products = []
 
-        # Привязки
         self.search_var.trace_add("write", lambda *a: self.refresh_catalog())
         self.category_var.trace_add("write", lambda *a: self.refresh_catalog())
         self.sort_var.trace_add("write", lambda *a: self.refresh_catalog())
@@ -49,6 +46,9 @@ class CatalogWindow:
         self.refresh_catalog()
         logger.info("Приложение запущено")
 
+    # ==========================================================
+    #  ИКОНКА
+    # ==========================================================
     def set_icon(self):
         try:
             if os.name == "nt":
@@ -75,13 +75,15 @@ class CatalogWindow:
             logger.error(f"Логотип: {e}")
             return None
 
+    # ==========================================================
+    #  ПОСТРОЕНИЕ ИНТЕРФЕЙСА
+    # ==========================================================
     def build_ui(self):
         # ===== ШАПКА =====
         header = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=80)
         header.pack(fill="x", side="top")
         header.pack_propagate(False)
 
-        # Логотип
         logo = self.load_logo_proportional("resources/logo.png", max_size=(60, 60))
         if logo:
             self.logo_label = tk.Label(header, image=logo, bg=COLOR_SECONDARY_BG)
@@ -93,7 +95,6 @@ class CatalogWindow:
                                         font=font(FONT_SIZE_NORMAL))
             self.logo_label.pack(side="left", padx=15)
 
-        # Заголовок
         tk.Label(header, text="КАТАЛОГ ТОВАРОВ",
                  font=font(FONT_SIZE_TITLE, bold=True),
                  bg=COLOR_SECONDARY_BG).pack(side="left", pady=15, padx=(0, 15))
@@ -107,7 +108,7 @@ class CatalogWindow:
         # Жанр
         tk.Label(header, text="Жанр:", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(5, 5))
-        categories = ["Все категории"] + self.get_categories()
+        categories = ["Все категории"] + self.load_categories_safe()
         ttk.Combobox(header, textvariable=self.category_var,
                      values=categories, state="readonly",
                      width=10).pack(side="left", padx=5)
@@ -195,7 +196,9 @@ class CatalogWindow:
     def _on_mousewheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-
+    # ==========================================================
+    #  ТЕМА
+    # ==========================================================
     def toggle_theme(self):
         current = self.root.cget("bg")
         new_bg = "#2E2E2E" if current == COLOR_MAIN_BG else COLOR_MAIN_BG
@@ -205,18 +208,17 @@ class CatalogWindow:
         logger.info(f"Тема: {new_bg}")
         self.refresh_catalog()
 
+    # ==========================================================
+    #  РАБОТА С БД (safe_call)
+    # ==========================================================
     def get_categories(self):
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            cur = conn.cursor()
-            cur.execute("SELECT DISTINCT жанр FROM Товар "
-                        "WHERE жанр IS NOT NULL ORDER BY жанр")
-            rows = cur.fetchall()
-            conn.close()
-            return [r[0] for r in rows if r[0]]
-        except Exception as e:
-            logger.error(f"Категории: {e}")
-            return []
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT жанр FROM Товар "
+                    "WHERE жанр IS NOT NULL ORDER BY жанр")
+        rows = cur.fetchall()
+        conn.close()
+        return [r[0] for r in rows if r[0]]
 
     def get_all_products(self):
         conn = sqlite3.connect(DB_PATH)
@@ -226,15 +228,19 @@ class CatalogWindow:
         conn.close()
         return rows
 
+    def load_categories_safe(self):
+        """Безопасная загрузка категорий."""
+        return safe_call(self.get_categories) or []
 
+    # ==========================================================
+    #  ЗАГРУЗКА КАТАЛОГА
+    # ==========================================================
     def refresh_catalog(self):
-        """Применяет фильтры, обновляет счётчики, перерисовывает каталог."""
         try:
-            # ===== safe_call для загрузки товаров =====
             products = safe_call(self.get_all_products) or []
             logger.debug(f"Загружено товаров: {len(products)}")
 
-            # Фильтр по жанру
+            # Фильтр
             category = self.category_var.get()
             if category and category != "Все категории":
                 products = [p for p in products if p[1] == category]
@@ -269,8 +275,10 @@ class CatalogWindow:
         except Exception as e:
             logger.error(f"Ошибка каталога: {e}", exc_info=True)
 
+    # ==========================================================
+    #  ПАГИНАЦИЯ
+    # ==========================================================
     def render_page(self):
-        """Рисует текущую страницу каталога."""
         for widget in self.catalog_frame.winfo_children():
             widget.destroy()
 
@@ -280,7 +288,6 @@ class CatalogWindow:
         page_products = self.filtered_products[start:end]
 
         for i, p in enumerate(page_products):
-            # ===== safe_call для создания карточки =====
             safe_call(create_product_card, self.catalog_frame, p, index=i)
 
         total_pages = max(1, (total + self.page_size - 1) // self.page_size)
@@ -305,9 +312,10 @@ class CatalogWindow:
             self.render_page()
             self.canvas.yview_moveto(0)
 
-
+    # ==========================================================
+    #  ЭКСПОРТ CSV
+    # ==========================================================
     def export_to_csv(self):
-        """Экспортирует текущий каталог в CSV-файл."""
         path = filedialog.asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv")],
@@ -321,7 +329,7 @@ class CatalogWindow:
                 writer = csv.writer(f, delimiter=";")
                 writer.writerow([
                     "ID", "Жанр", "Исполнитель", "Название",
-                    "Длительность (сек)", "Цена", "Количество", "Обложка"
+                    "Длительность (сек)", "Цена", "Количество", "Обложка", "Описание"
                 ])
                 for p in self.filtered_products:
                     writer.writerow(p)
@@ -329,10 +337,25 @@ class CatalogWindow:
 
         safe_call(_write_csv)
 
-  
-    def add_to_order(self, product):
-        """Заглушка — добавление товара в заказ."""
-        logger.info(f"Добавление в заказ: {product[3]}")
+    # ==========================================================
+    #  ДОБАВЛЕНИЕ В ЗАКАЗ
+    # ==========================================================
+    def add_to_order(self, product, quantity=1):
+        """Добавляет товар в заказ с указанием количества."""
+        logger.info(f"Добавление в заказ: {product[3]} × {quantity}")
+
+        def _update_stock():
+            conn = sqlite3.connect(DB_PATH)
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE Товар SET количество = количество - ? WHERE id = ?",
+                (quantity, product[0])
+            )
+            conn.commit()
+            conn.close()
+
+        safe_call(_update_stock)
+        self.refresh_catalog()
 
     def run(self):
         self.root.mainloop()

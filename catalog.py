@@ -11,6 +11,9 @@ from discount import calculate_price_with_discount
 from utils import format_price
 
 
+# ==========================================================
+#  TOOLTIP
+# ==========================================================
 class ToolTip:
     """Всплывающая подсказка при наведении на карточку."""
 
@@ -78,10 +81,13 @@ class ToolTip:
             self.tip = None
 
 
-
+# ==========================================================
+#  ОСНОВНАЯ ФУНКЦИЯ
+# ==========================================================
 def create_product_card(parent, product, index=0):
     """Создаёт карточку товара по макету."""
-    product_id, genre, artist, title, duration, price, qty, cover = product
+    # ⚠️ В БД 9 полей (с описанием) — берём первые 8
+    product_id, genre, artist, title, duration, price, qty, cover = product[:8]
     qty_safe = qty if qty is not None else 0
     bg_color = _get_card_color(qty_safe, index)
 
@@ -92,9 +98,6 @@ def create_product_card(parent, product, index=0):
     _add_text_info(card, product_id, genre, artist, title, duration,
                    price, qty_safe, bg_color)
     _add_indicator_column(card, qty_safe, bg_color)
-    _add_separator(parent)
-
-    # Tooltip
     _add_separator(parent)
 
     # Tooltip
@@ -116,6 +119,9 @@ def create_product_card(parent, product, index=0):
     return card
 
 
+# ==========================================================
+#  РЕКУРСИВНАЯ ПРИВЯЗКА КЛИКА
+# ==========================================================
 def _bind_click_recursive(widget, parent, product):
     """Рекурсивно привязывает клик ко всем вложенным виджетам."""
     widget.bind("<Button-1>", lambda e: _open_view(parent, product))
@@ -124,6 +130,9 @@ def _bind_click_recursive(widget, parent, product):
         _bind_click_recursive(child, parent, product)
 
 
+# ==========================================================
+#  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ==========================================================
 def _get_card_color(qty, index):
     """Цвет фона: подсветка ≤3 или чередование."""
     if qty <= 3:
@@ -217,6 +226,9 @@ def _add_separator(parent):
     separator.pack(fill="x", padx=10, pady=(0, 5))
 
 
+# ==========================================================
+#  ИНДИКАТОРЫ
+# ==========================================================
 def _indicator(qty):
     """Индикатор количества (3 уровня) с защитой от плохих данных."""
     if qty is None:
@@ -258,7 +270,9 @@ def _get_indicator_icon(qty):
         return "❌"
 
 
-
+# ==========================================================
+#  ФОРМАТИРОВАНИЕ
+# ==========================================================
 def _format_duration(seconds):
     minutes = seconds // 60
     secs = seconds % 60
@@ -279,25 +293,16 @@ def _truncate_title(title, max_length=60):
     return title[:max_length - 1] + "…"
 
 
-
+# ==========================================================
+#  ОТКРЫТИЕ ФОРМЫ ПРОСМОТРА
+# ==========================================================
 def _open_view(parent, product):
-    """
-    Открывает форму просмотра товара при клике на карточку.
-
-    :param parent: виджет-родитель (карточка)
-    :param product: кортеж с данными товара
-    """
+    """Открывает форму просмотра товара при клике на карточку."""
     try:
         from view_form import ViewForm
-
-        # Находим корневое окно
         root = parent.winfo_toplevel()
-
-        # Пытаемся найти callback add_to_order в главном окне
         callback = getattr(root, "add_to_order", None)
-
         ViewForm(root, product, on_add_to_order=callback)
-
     except Exception as e:
         print(f"[DEBUG] Ошибка открытия формы: {e}")
         import traceback
