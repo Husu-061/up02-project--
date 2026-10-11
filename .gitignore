@@ -27,6 +27,7 @@ Thumbs.db
 
 # Логи
 *.log
+app.log
 
 # Базы данных
 *.db

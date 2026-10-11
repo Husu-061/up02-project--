@@ -176,8 +176,6 @@ def _add_indicator_column(card, qty, bg_color):
     indicator_color = _get_indicator_color(qty)
     indicator_icon = _get_indicator_icon(qty)
 
-    print(f"[DEBUG] qty={qty}, text='{indicator_text}', icon='{indicator_icon}'")
-
     # Иконка (А6)
     tk.Label(indicator_frame, text=indicator_icon,
              font=font(FONT_SIZE_HEADER + 6),

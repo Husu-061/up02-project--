@@ -14,16 +14,21 @@ from styles import (
 )
 from catalog import create_product_card
 from utils import format_price, matches_query
+from logger import logger    # ← логирование
 
 
 class CatalogWindow:
     def __init__(self):
+        logger.info("=" * 50)
+        logger.info("Запуск приложения")
+
         self.root = tk.Tk()
         self.root.title(APP_TITLE)
         self.root.geometry("1300x750")
         self.root.configure(bg=COLOR_MAIN_BG)
 
         self.set_icon()
+        logger.debug("Иконка установлена")
 
         # Переменные состояния (А7)
         self.search_var = tk.StringVar()
@@ -41,15 +46,18 @@ class CatalogWindow:
         self.sort_var.trace_add("write", lambda *a: self.refresh_catalog())
 
         self.build_ui()
+        logger.debug("Интерфейс построен")
+
         self.refresh_catalog()
+        logger.info("Приложение запущено и каталог загружен")
 
 
     def set_icon(self):
-        """Устанавливает иконку приложения (кроссплатформенно)."""
         try:
             if os.name == "nt":
                 if os.path.exists("resources/icon.ico"):
                     self.root.iconbitmap("resources/icon.ico")
+                    logger.debug("Установлена иконка icon.ico")
             else:
                 if os.path.exists("resources/logo.png"):
                     img = Image.open("resources/logo.png")
@@ -58,20 +66,19 @@ class CatalogWindow:
                     self.root.iconphoto(True, icon_img)  # type: ignore
                     self.root.icon = icon_img  # type: ignore
         except Exception as e:
-            print(f"[DEBUG] Иконка: {e}")
+            logger.warning(f"Не удалось установить иконку: {e}")
 
     def load_logo_proportional(self, path, max_size=(60, 60)):
-        """Загружает логотип с сохранением пропорций."""
         try:
             if not os.path.exists(path):
+                logger.warning(f"Логотип не найден: {path}")
                 return None
             img = Image.open(path)
             img.thumbnail(max_size)
             return ImageTk.PhotoImage(img)
         except Exception as e:
-            print(f"[DEBUG] Логотип: {e}")
+            logger.error(f"Ошибка загрузки логотипа: {e}", exc_info=True)
             return None
-
 
     def build_ui(self):
         # ============ 1. ШАПКА (сверху) ============
@@ -102,7 +109,7 @@ class CatalogWindow:
         tk.Entry(header, textvariable=self.search_var, width=12,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=5)
 
-        # Фильтр по жанру
+        # Жанр
         tk.Label(header, text="Жанр:", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(5, 5))
         categories = ["Все категории"] + self.get_categories()
@@ -117,7 +124,7 @@ class CatalogWindow:
                      values=["Без сортировки", "Цена ↑", "Цена ↓", "Название А-Я"],
                      state="readonly", width=13).pack(side="left", padx=5)
 
-        # Кнопка экспорта в CSV (А5)
+        # CSV
         tk.Button(header, text="📥 CSV",
                   command=self.export_to_csv,
                   bg=COLOR_ACCENT, fg="white",
@@ -125,7 +132,7 @@ class CatalogWindow:
                   relief="flat", padx=8, pady=3,
                   cursor="hand2").pack(side="left", padx=3)
 
-        # Кнопка тёмной темы (А5)
+        # Тема
         tk.Button(header, text="🌙",
                   command=self.toggle_theme,
                   bg=COLOR_ACCENT, fg="white",
@@ -133,7 +140,7 @@ class CatalogWindow:
                   relief="flat", padx=8, pady=3,
                   cursor="hand2").pack(side="left", padx=3)
 
-        # Статистика в шапке (А8) — СПРАВА
+        # Статистика (А8)
         self.count_label = tk.Label(header, text="Товаров: 0",
                                      bg=COLOR_SECONDARY_BG,
                                      font=font(FONT_SIZE_NORMAL, bold=True))
@@ -145,7 +152,6 @@ class CatalogWindow:
         self.stats_label.pack(side="right", padx=15)
 
         # ============ 2. ПАНЕЛЬ ПАГИНАЦИИ (снизу) ============
-        # ⚠️ Упаковываем ДО canvas — иначе canvas займёт всё место
         pagination_frame = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=45)
         pagination_frame.pack(fill="x", side="bottom")
         pagination_frame.pack_propagate(False)
@@ -169,7 +175,7 @@ class CatalogWindow:
                   relief="flat", padx=20, pady=5,
                   cursor="hand2").pack(side="right", padx=15, pady=8)
 
-        # ============ 3. ОБЛАСТЬ ПРОКРУТКИ (занимает всё оставшееся) ============
+        # ============ 3. ОБЛАСТЬ ПРОКРУТКИ ============
         self.canvas = tk.Canvas(self.root, bg=COLOR_MAIN_BG, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.root, orient="vertical",
                                    command=self.canvas.yview)
@@ -201,17 +207,22 @@ class CatalogWindow:
         self.root.configure(bg=new_bg)
         self.canvas.configure(bg=new_bg)
         self.catalog_frame.configure(bg=new_bg)
+        logger.info(f"Тема переключена: {new_bg}")
         self.refresh_catalog()
 
 
     def get_categories(self):
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        cur.execute("SELECT DISTINCT жанр FROM Товар "
-                    "WHERE жанр IS NOT NULL ORDER BY жанр")
-        rows = cur.fetchall()
-        conn.close()
-        return [r[0] for r in rows if r[0]]
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cur = conn.cursor()
+            cur.execute("SELECT DISTINCT жанр FROM Товар "
+                        "WHERE жанр IS NOT NULL ORDER BY жанр")
+            rows = cur.fetchall()
+            conn.close()
+            return [r[0] for r in rows if r[0]]
+        except Exception as e:
+            logger.error(f"Ошибка получения категорий: {e}", exc_info=True)
+            return []
 
     def get_all_products(self):
         conn = sqlite3.connect(DB_PATH)
@@ -223,45 +234,45 @@ class CatalogWindow:
 
     def refresh_catalog(self):
         """Применяет фильтры, обновляет счётчики, перерисовывает каталог."""
-        products = self.get_all_products()
+        try:
+            products = self.get_all_products()
+            logger.debug(f"Загружено товаров из БД: {len(products)}")
 
-        # Фильтр по жанру (А2)
-        category = self.category_var.get()
-        if category and category != "Все категории":
-            products = [p for p in products if p[1] == category]
+            category = self.category_var.get()
+            if category and category != "Все категории":
+                products = [p for p in products if p[1] == category]
+                logger.debug(f"После фильтра '{category}': {len(products)}")
 
-        # Поиск по нескольким полям (А6)
-        query = self.search_var.get()
-        products = [p for p in products if matches_query(p, query)]
+            query = self.search_var.get()
+            if query:
+                products = [p for p in products if matches_query(p, query)]
+                logger.debug(f"После поиска '{query}': {len(products)}")
 
-        # Сортировка (А7)
-        order = self.sort_var.get()
-        if order == "Цена ↑":
-            products.sort(key=lambda p: p[5] or 0)
-        elif order == "Цена ↓":
-            products.sort(key=lambda p: p[5] or 0, reverse=True)
-        elif order == "Название А-Я":
-            products.sort(key=lambda p: p[3] or "")
+            order = self.sort_var.get()
+            if order == "Цена ↑":
+                products.sort(key=lambda p: p[5] or 0)
+            elif order == "Цена ↓":
+                products.sort(key=lambda p: p[5] or 0, reverse=True)
+            elif order == "Название А-Я":
+                products.sort(key=lambda p: p[3] or "")
 
-        # Счётчик товаров (А3)
-        self.count_label.config(text=f"Товаров: {len(products)}")
+            self.count_label.config(text=f"Товаров: {len(products)}")
 
-        # ===== Статистика индикаторов (А8) =====
-        many   = sum(1 for p in products if (p[6] or 0) > 20)
-        middle = sum(1 for p in products if 5 < (p[6] or 0) <= 20)
-        few    = sum(1 for p in products if (p[6] or 0) <= 5)
-        self.stats_label.config(
-            text=f"🟢 {many}   🟡 {middle}   🔴 {few}"
-        )
+            many   = sum(1 for p in products if (p[6] or 0) > 20)
+            middle = sum(1 for p in products if 5 < (p[6] or 0) <= 20)
+            few    = sum(1 for p in products if (p[6] or 0) <= 5)
+            self.stats_label.config(text=f"🟢 {many}   🟡 {middle}   🔴 {few}")
+            logger.debug(f"Статистика: много={many}, средне={middle}, мало={few}")
 
-        # Сохраняем отфильтрованные товары и сбрасываем страницу
-        self.filtered_products = products
-        self.current_page = 0
-        self.render_page()
+            self.filtered_products = products
+            self.current_page = 0
+            self.render_page()
+
+        except Exception as e:
+            logger.error(f"Ошибка загрузки каталога: {e}", exc_info=True)
 
 
     def render_page(self):
-        """Рисует текущую страницу каталога."""
         for widget in self.catalog_frame.winfo_children():
             widget.destroy()
 
@@ -295,15 +306,17 @@ class CatalogWindow:
             self.render_page()
             self.canvas.yview_moveto(0)
 
-
+    # ==========================================================
+    #  ЭКСПОРТ В CSV
+    # ==========================================================
     def export_to_csv(self):
-        """Экспортирует текущий каталог в CSV-файл."""
         path = filedialog.asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv")],
             initialfile="catalog_export.csv"
         )
         if not path:
+            logger.info("Экспорт CSV отменён пользователем")
             return
 
         try:
@@ -315,8 +328,10 @@ class CatalogWindow:
                 ])
                 for p in self.filtered_products:
                     writer.writerow(p)
+            logger.info(f"Экспортировано {len(self.filtered_products)} в {path}")
             print(f"✅ Экспортировано в {path}")
         except Exception as e:
+            logger.error(f"Ошибка экспорта CSV: {e}", exc_info=True)
             print(f"❌ Ошибка экспорта: {e}")
 
     def run(self):
@@ -324,4 +339,8 @@ class CatalogWindow:
 
 
 if __name__ == "__main__":
-    CatalogWindow().run()
+    try:
+        CatalogWindow().run()
+    except Exception as e:
+        logger.critical(f"Критическая ошибка: {e}", exc_info=True)
+        raise
