@@ -1,6 +1,6 @@
 """Главное окно с каталогом."""
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 import os
 import sqlite3
@@ -28,9 +28,20 @@ class CatalogWindow:
         self.root.geometry("1300x750")
         self.root.configure(bg=COLOR_MAIN_BG)
 
+        # Центрируем окно на экране
+        self.root.update_idletasks()
+        w = 1300
+        h = 750
+        x = (self.root.winfo_screenwidth() - w) // 2
+        y = (self.root.winfo_screenheight() - h) // 2
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
+
         self.set_icon()
 
-        # Переменные состояния
+        # ===== Пользователь (заполнится после авторизации) =====
+        self.current_user = None   # (id, логин, фио, роль)
+
+        # ===== Переменные — создаём сразу =====
         self.search_var = tk.StringVar()
         self.category_var = tk.StringVar(value="Все категории")
         self.sort_var = tk.StringVar(value="Без сортировки")
@@ -40,20 +51,23 @@ class CatalogWindow:
         self.current_page = 0
         self.filtered_products = []
 
-        # Привязки
-        self.search_var.trace_add("write", lambda *a: self.refresh_catalog())
-        self.category_var.trace_add("write", lambda *a: self.refresh_catalog())
-        self.sort_var.trace_add("write", lambda *a: self.refresh_catalog())
+        # ===== Пока окно пустое — показываем только авторизацию =====
+        # Создаём заглушку, которую заменим после входа
+        self.placeholder = tk.Label(
+            self.root,
+            text="⏳ Ожидание авторизации...",
+            font=font(FONT_SIZE_TITLE),
+            bg=COLOR_MAIN_BG, fg="gray"
+        )
+        self.placeholder.pack(expand=True)
 
-        self.build_ui()
-        self.refresh_catalog()
-        logger.info("Приложение запущено")
+        # Через 100 мс показываем окно авторизации
+        self.root.after(100, self.show_auth_window)
 
     # ==========================================================
-    #  ИКОНКА ПРИЛОЖЕНИЯ
+    #  ИКОНКА
     # ==========================================================
     def set_icon(self):
-        """Устанавливает иконку приложения (кроссплатформенно)."""
         try:
             if os.name == "nt":
                 if os.path.exists("resources/icon.ico"):
@@ -69,7 +83,6 @@ class CatalogWindow:
             logger.warning(f"Иконка: {e}")
 
     def load_logo_proportional(self, path, max_size=(60, 60)):
-        """Загружает логотип с сохранением пропорций."""
         try:
             if not os.path.exists(path):
                 return None
@@ -81,11 +94,52 @@ class CatalogWindow:
             return None
 
     # ==========================================================
+    #  ОКНО АВТОРИЗАЦИИ — открывается через after()
+    # ==========================================================
+    def show_auth_window(self):
+        """Открывает окно авторизации поверх главного."""
+        try:
+            from auth import AuthWindow
+            AuthWindow(self.root, self.on_login_success)
+            logger.info("Окно авторизации открыто")
+        except Exception as e:
+            logger.critical(f"Ошибка открытия авторизации: {e}", exc_info=True)
+            messagebox.showerror(
+                "Ошибка",
+                f"Не удалось открыть окно авторизации:\n{e}"
+            )
+            self.root.destroy()
+
+    # ==========================================================
+    #  ОБРАБОТЧИК УСПЕШНОГО ВХОДА
+    # ==========================================================
+    def on_login_success(self, user):
+        """
+        Обработчик успешной авторизации.
+
+        :param user: (id, логин, фио, роль)
+        """
+        self.current_user = user
+        logger.info(f"Авторизация: {user[1]} — {user[3]}")
+
+        # Убираем заглушку
+        self.placeholder.destroy()
+
+        # Привязки переменных
+        self.search_var.trace_add("write", lambda *a: self.refresh_catalog())
+        self.category_var.trace_add("write", lambda *a: self.refresh_catalog())
+        self.sort_var.trace_add("write", lambda *a: self.refresh_catalog())
+
+        # Строим интерфейс и загружаем каталог
+        self.build_ui()
+        self.refresh_catalog()
+        logger.info("Приложение готово")
+
+    # ==========================================================
     #  ПОСТРОЕНИЕ ИНТЕРФЕЙСА
-    #  Порядок pack(): 1) Шапка  2) Пагинация  3) Canvas
     # ==========================================================
     def build_ui(self):
-        # ============ 1. ШАПКА (сверху) ============
+        # ============ 1. ШАПКА ============
         header = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=80)
         header.pack(fill="x", side="top")
         header.pack_propagate(False)
@@ -113,7 +167,7 @@ class CatalogWindow:
         tk.Entry(header, textvariable=self.search_var, width=12,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=5)
 
-        # Фильтр по жанру
+        # Жанр
         tk.Label(header, text="Жанр:", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(5, 5))
         categories = ["Все категории"] + self.load_categories_safe()
@@ -128,7 +182,7 @@ class CatalogWindow:
                      values=["Без сортировки", "Цена ↑", "Цена ↓", "Название А-Я"],
                      state="readonly", width=13).pack(side="left", padx=5)
 
-        # Кнопка экспорта CSV
+        # CSV
         tk.Button(header, text="📥 CSV",
                   command=self.export_to_csv,
                   bg=COLOR_ACCENT, fg="white",
@@ -136,7 +190,7 @@ class CatalogWindow:
                   relief="flat", padx=8, pady=3,
                   cursor="hand2").pack(side="left", padx=3)
 
-        # Кнопка тёмной темы
+        # Тема
         tk.Button(header, text="🌙",
                   command=self.toggle_theme,
                   bg=COLOR_ACCENT, fg="white",
@@ -144,13 +198,21 @@ class CatalogWindow:
                   relief="flat", padx=8, pady=3,
                   cursor="hand2").pack(side="left", padx=3)
 
-        # ===== ЗАДАНИЕ 5.3 — Кнопка «Заказы» =====
-        tk.Button(header, text="📋 Заказы",
-                  command=self.open_orders,
-                  bg=COLOR_ACCENT, fg="white",
-                  font=font(FONT_SIZE_NORMAL),
-                  relief="flat", padx=8, pady=3,
-                  cursor="hand2").pack(side="left", padx=3)
+        # ===== КНОПКА «ЗАКАЗЫ» — ТОЛЬКО МЕНЕДЖЕР / АДМИНИСТРАТОР =====
+        if self.current_user and self.current_user[3] in ("Менеджер", "Администратор"):
+            tk.Button(header, text="📋 Заказы",
+                      command=self.open_orders,
+                      bg=COLOR_ACCENT, fg="white",
+                      font=font(FONT_SIZE_NORMAL),
+                      relief="flat", padx=8, pady=3,
+                      cursor="hand2").pack(side="left", padx=3)
+
+        # Информация о пользователе — справа
+        if self.current_user:
+            user_info = f"👤 {self.current_user[2]} ({self.current_user[3]})"
+            tk.Label(header, text=user_info,
+                     bg=COLOR_SECONDARY_BG,
+                     font=font(FONT_SIZE_NORMAL)).pack(side="right", padx=15)
 
         # Статистика
         self.count_label = tk.Label(header, text="Товаров: 0",
@@ -163,7 +225,7 @@ class CatalogWindow:
                                      font=font(FONT_SIZE_NORMAL, bold=True))
         self.stats_label.pack(side="right", padx=15)
 
-        # ============ 2. ПАНЕЛЬ ПАГИНАЦИИ (снизу) ============
+        # ============ 2. ПАНЕЛЬ ПАГИНАЦИИ ============
         pagination_frame = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=45)
         pagination_frame.pack(fill="x", side="bottom")
         pagination_frame.pack_propagate(False)
@@ -187,7 +249,7 @@ class CatalogWindow:
                   relief="flat", padx=20, pady=5,
                   cursor="hand2").pack(side="right", padx=15, pady=8)
 
-        # ============ 3. ОБЛАСТЬ ПРОКРУТКИ ============
+        # ============ 3. CANVAS ============
         self.canvas = tk.Canvas(self.root, bg=COLOR_MAIN_BG, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.root, orient="vertical",
                                    command=self.canvas.yview)
@@ -251,28 +313,17 @@ class CatalogWindow:
     #  ЗАГРУЗКА КАТАЛОГА
     # ==========================================================
     def refresh_catalog(self):
-        """
-        Применяет фильтры, обновляет счётчики, перерисовывает каталог.
-
-        Вызывается:
-        - при старте;
-        - при изменении фильтров;
-        - после оформления заказа (через callback).
-        """
         try:
             products = safe_call(self.get_all_products) or []
 
-            # Фильтр
             category = self.category_var.get()
             if category and category != "Все категории":
                 products = [p for p in products if p[1] == category]
 
-            # Поиск
             query = self.search_var.get()
             if query:
                 products = [p for p in products if matches_query(p, query)]
 
-            # Сортировка
             order = self.sort_var.get()
             if order == "Цена ↑":
                 products.sort(key=lambda p: p[5] or 0)
@@ -281,10 +332,8 @@ class CatalogWindow:
             elif order == "Название А-Я":
                 products.sort(key=lambda p: p[3] or "")
 
-            # Счётчик
             self.count_label.config(text=f"Товаров: {len(products)}")
 
-            # Статистика
             many   = sum(1 for p in products if (p[6] or 0) > 20)
             middle = sum(1 for p in products if 5 < (p[6] or 0) <= 20)
             few    = sum(1 for p in products if (p[6] or 0) <= 5)
@@ -336,7 +385,7 @@ class CatalogWindow:
             self.canvas.yview_moveto(0)
 
     # ==========================================================
-    #  ЭКСПОРТ В CSV
+    #  ЭКСПОРТ
     # ==========================================================
     def export_to_csv(self):
         path = filedialog.asksaveasfilename(
@@ -363,14 +412,21 @@ class CatalogWindow:
         safe_call(_write_csv)
 
     # ==========================================================
-    #  ЗАДАНИЕ 5.2 — ОТКРЫТИЕ ОКНА ЗАКАЗОВ
+    #  ОТКРЫТИЕ ОКНА ЗАКАЗОВ
     # ==========================================================
     def open_orders(self):
-        """Открывает окно списка заказов."""
+        """Открывает окно списка заказов (только Менеджер/Администратор)."""
+        if not self.current_user or self.current_user[3] not in ("Менеджер", "Администратор"):
+            messagebox.showerror(
+                "Доступ запрещён",
+                "У вас нет прав для просмотра заказов."
+            )
+            return
+
         try:
             from orders_window import OrdersWindow
             OrdersWindow(self.root)
-            logger.info("Открыто окно списка заказов")
+            logger.info(f"Открыто окно заказов ({self.current_user[1]})")
         except Exception as e:
             logger.error(f"Ошибка открытия окна заказов: {e}", exc_info=True)
 
