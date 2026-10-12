@@ -46,9 +46,6 @@ class CatalogWindow:
         self.refresh_catalog()
         logger.info("Приложение запущено")
 
-    # ==========================================================
-    #  ИКОНКА
-    # ==========================================================
     def set_icon(self):
         try:
             if os.name == "nt":
@@ -76,10 +73,9 @@ class CatalogWindow:
             return None
 
     # ==========================================================
-    #  ПОСТРОЕНИЕ ИНТЕРФЕЙСА
+    #  ИНТЕРФЕЙС
     # ==========================================================
     def build_ui(self):
-        # ===== ШАПКА =====
         header = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=80)
         header.pack(fill="x", side="top")
         header.pack_propagate(False)
@@ -99,13 +95,11 @@ class CatalogWindow:
                  font=font(FONT_SIZE_TITLE, bold=True),
                  bg=COLOR_SECONDARY_BG).pack(side="left", pady=15, padx=(0, 15))
 
-        # Поиск
         tk.Label(header, text="🔍", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left")
         tk.Entry(header, textvariable=self.search_var, width=12,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=5)
 
-        # Жанр
         tk.Label(header, text="Жанр:", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(5, 5))
         categories = ["Все категории"] + self.load_categories_safe()
@@ -113,14 +107,12 @@ class CatalogWindow:
                      values=categories, state="readonly",
                      width=10).pack(side="left", padx=5)
 
-        # Сортировка
         tk.Label(header, text="Сорт.:", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(5, 5))
         ttk.Combobox(header, textvariable=self.sort_var,
                      values=["Без сортировки", "Цена ↑", "Цена ↓", "Название А-Я"],
                      state="readonly", width=13).pack(side="left", padx=5)
 
-        # CSV
         tk.Button(header, text="📥 CSV",
                   command=self.export_to_csv,
                   bg=COLOR_ACCENT, fg="white",
@@ -128,7 +120,6 @@ class CatalogWindow:
                   relief="flat", padx=8, pady=3,
                   cursor="hand2").pack(side="left", padx=3)
 
-        # Тема
         tk.Button(header, text="🌙",
                   command=self.toggle_theme,
                   bg=COLOR_ACCENT, fg="white",
@@ -136,7 +127,6 @@ class CatalogWindow:
                   relief="flat", padx=8, pady=3,
                   cursor="hand2").pack(side="left", padx=3)
 
-        # Статистика
         self.count_label = tk.Label(header, text="Товаров: 0",
                                      bg=COLOR_SECONDARY_BG,
                                      font=font(FONT_SIZE_NORMAL, bold=True))
@@ -147,7 +137,7 @@ class CatalogWindow:
                                      font=font(FONT_SIZE_NORMAL, bold=True))
         self.stats_label.pack(side="right", padx=15)
 
-        # ===== ПАНЕЛЬ ПАГИНАЦИИ =====
+        # Пагинация
         pagination_frame = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=45)
         pagination_frame.pack(fill="x", side="bottom")
         pagination_frame.pack_propagate(False)
@@ -171,7 +161,7 @@ class CatalogWindow:
                   relief="flat", padx=20, pady=5,
                   cursor="hand2").pack(side="right", padx=15, pady=8)
 
-        # ===== CANVAS =====
+        # Canvas
         self.canvas = tk.Canvas(self.root, bg=COLOR_MAIN_BG, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.root, orient="vertical",
                                    command=self.canvas.yview)
@@ -196,20 +186,16 @@ class CatalogWindow:
     def _on_mousewheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-    # ==========================================================
-    #  ТЕМА
-    # ==========================================================
     def toggle_theme(self):
         current = self.root.cget("bg")
         new_bg = "#2E2E2E" if current == COLOR_MAIN_BG else COLOR_MAIN_BG
         self.root.configure(bg=new_bg)
         self.canvas.configure(bg=new_bg)
         self.catalog_frame.configure(bg=new_bg)
-        logger.info(f"Тема: {new_bg}")
         self.refresh_catalog()
 
     # ==========================================================
-    #  РАБОТА С БД (safe_call)
+    #  БД
     # ==========================================================
     def get_categories(self):
         conn = sqlite3.connect(DB_PATH)
@@ -229,7 +215,6 @@ class CatalogWindow:
         return rows
 
     def load_categories_safe(self):
-        """Безопасная загрузка категорий."""
         return safe_call(self.get_categories) or []
 
     # ==========================================================
@@ -238,19 +223,15 @@ class CatalogWindow:
     def refresh_catalog(self):
         try:
             products = safe_call(self.get_all_products) or []
-            logger.debug(f"Загружено товаров: {len(products)}")
 
-            # Фильтр
             category = self.category_var.get()
             if category and category != "Все категории":
                 products = [p for p in products if p[1] == category]
 
-            # Поиск
             query = self.search_var.get()
             if query:
                 products = [p for p in products if matches_query(p, query)]
 
-            # Сортировка
             order = self.sort_var.get()
             if order == "Цена ↑":
                 products.sort(key=lambda p: p[5] or 0)
@@ -259,10 +240,8 @@ class CatalogWindow:
             elif order == "Название А-Я":
                 products.sort(key=lambda p: p[3] or "")
 
-            # Счётчик
             self.count_label.config(text=f"Товаров: {len(products)}")
 
-            # Статистика
             many   = sum(1 for p in products if (p[6] or 0) > 20)
             middle = sum(1 for p in products if 5 < (p[6] or 0) <= 20)
             few    = sum(1 for p in products if (p[6] or 0) <= 5)
@@ -276,7 +255,7 @@ class CatalogWindow:
             logger.error(f"Ошибка каталога: {e}", exc_info=True)
 
     # ==========================================================
-    #  ПАГИНАЦИЯ
+    #  ПАГИНАЦИЯ (передаём refresh=self.refresh_catalog)
     # ==========================================================
     def render_page(self):
         for widget in self.catalog_frame.winfo_children():
@@ -288,7 +267,9 @@ class CatalogWindow:
         page_products = self.filtered_products[start:end]
 
         for i, p in enumerate(page_products):
-            safe_call(create_product_card, self.catalog_frame, p, index=i)
+            # ===== Передаём callback refresh_catalog =====
+            safe_call(create_product_card, self.catalog_frame, p,
+                      index=i, refresh=self.refresh_catalog)
 
         total_pages = max(1, (total + self.page_size - 1) // self.page_size)
         self.page_label.config(
@@ -313,7 +294,7 @@ class CatalogWindow:
             self.canvas.yview_moveto(0)
 
     # ==========================================================
-    #  ЭКСПОРТ CSV
+    #  ЭКСПОРТ
     # ==========================================================
     def export_to_csv(self):
         path = filedialog.asksaveasfilename(
@@ -336,26 +317,6 @@ class CatalogWindow:
             print(f"✅ Экспортировано в {path}")
 
         safe_call(_write_csv)
-
-    # ==========================================================
-    #  ДОБАВЛЕНИЕ В ЗАКАЗ
-    # ==========================================================
-    def add_to_order(self, product, quantity=1):
-        """Добавляет товар в заказ с указанием количества."""
-        logger.info(f"Добавление в заказ: {product[3]} × {quantity}")
-
-        def _update_stock():
-            conn = sqlite3.connect(DB_PATH)
-            cur = conn.cursor()
-            cur.execute(
-                "UPDATE Товар SET количество = количество - ? WHERE id = ?",
-                (quantity, product[0])
-            )
-            conn.commit()
-            conn.close()
-
-        safe_call(_update_stock)
-        self.refresh_catalog()
 
     def run(self):
         self.root.mainloop()

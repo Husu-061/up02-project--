@@ -82,11 +82,10 @@ class ToolTip:
 
 
 # ==========================================================
-#  ОСНОВНАЯ ФУНКЦИЯ
+#  ОСНОВНАЯ ФУНКЦИЯ (Задание 5.6 — принимает refresh)
 # ==========================================================
-def create_product_card(parent, product, index=0):
+def create_product_card(parent, product, index=0, refresh=None):
     """Создаёт карточку товара по макету."""
-    # ⚠️ В БД 9 полей (с описанием) — берём первые 8
     product_id, genre, artist, title, duration, price, qty, cover = product[:8]
     qty_safe = qty if qty is not None else 0
     bg_color = _get_card_color(qty_safe, index)
@@ -110,8 +109,8 @@ def create_product_card(parent, product, index=0):
     )
     ToolTip(card, tooltip_text)
 
-    # ===== Рекурсивная привязка клика =====
-    _bind_click_recursive(card, parent, product)
+    # ===== Рекурсивная привязка клика с передачей refresh =====
+    _bind_click_recursive(card, parent, product, refresh)
 
     card.bind("<Enter>", lambda e: card.configure(cursor="hand2"))
     card.bind("<Leave>", lambda e: card.configure(cursor=""))
@@ -122,26 +121,24 @@ def create_product_card(parent, product, index=0):
 # ==========================================================
 #  РЕКУРСИВНАЯ ПРИВЯЗКА КЛИКА
 # ==========================================================
-def _bind_click_recursive(widget, parent, product):
+def _bind_click_recursive(widget, parent, product, refresh=None):
     """Рекурсивно привязывает клик ко всем вложенным виджетам."""
-    widget.bind("<Button-1>", lambda e: _open_view(parent, product))
+    widget.bind("<Button-1>", lambda e: _open_view(parent, product, refresh))
 
     for child in widget.winfo_children():
-        _bind_click_recursive(child, parent, product)
+        _bind_click_recursive(child, parent, product, refresh)
 
 
 # ==========================================================
 #  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ==========================================================
 def _get_card_color(qty, index):
-    """Цвет фона: подсветка ≤3 или чередование."""
     if qty <= 3:
         return COLOR_HIGHLIGHT
     return COLOR_MAIN_BG if index % 2 == 0 else COLOR_SECONDARY_BG
 
 
 def _add_image(card, cover, bg_color):
-    """Изображение товара или заглушка."""
     img_frame = tk.Frame(card, bg=bg_color)
     img_frame.pack(side="left", padx=10, pady=10)
 
@@ -158,7 +155,6 @@ def _add_image(card, cover, bg_color):
 
 def _add_text_info(card, product_id, genre, artist, title, duration,
                    price, qty, bg_color):
-    """Текстовая информация с проверками крайних случаев."""
     text_frame = tk.Frame(card, bg=bg_color)
     text_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
@@ -177,7 +173,6 @@ def _add_text_info(card, product_id, genre, artist, title, duration,
 
 
 def _add_indicator_column(card, qty, bg_color):
-    """Индикатор в отдельной колонке справа."""
     indicator_frame = tk.Frame(card, bg=bg_color)
     indicator_frame.pack(side="right", padx=15, pady=10)
 
@@ -188,11 +183,9 @@ def _add_indicator_column(card, qty, bg_color):
     tk.Label(indicator_frame, text=indicator_icon,
              font=font(FONT_SIZE_HEADER + 6),
              bg=bg_color).pack()
-
     tk.Label(indicator_frame, text=indicator_text,
              font=font(FONT_SIZE_HEADER, bold=True),
              fg=indicator_color, bg=bg_color).pack()
-
     tk.Label(indicator_frame, text=f"({qty} шт.)",
              font=font(FONT_SIZE_NORMAL),
              bg=bg_color).pack()
@@ -200,13 +193,11 @@ def _add_indicator_column(card, qty, bg_color):
 
 def _add_label(parent, text, bg_color, bold=False,
                size=FONT_SIZE_NORMAL, align=tk.W):
-    """Метка с текстом."""
     tk.Label(parent, text=text, font=font(size, bold=bold),
              bg=bg_color, anchor=align).pack(fill="x")  # type: ignore
 
 
 def _add_price_label(parent, product_id, price, bg_color):
-    """Цена со скидкой + разделители тысяч."""
     final_price = calculate_price_with_discount(product_id, price)
     price_str = format_price(final_price)
 
@@ -226,11 +217,7 @@ def _add_separator(parent):
     separator.pack(fill="x", padx=10, pady=(0, 5))
 
 
-# ==========================================================
-#  ИНДИКАТОРЫ
-# ==========================================================
 def _indicator(qty):
-    """Индикатор количества (3 уровня) с защитой от плохих данных."""
     if qty is None:
         return "мало"
     if isinstance(qty, str):
@@ -251,7 +238,6 @@ def _indicator(qty):
 
 
 def _get_indicator_color(qty):
-    """Цвет индикатора: ≤3 — красный, 4–5 — оранжевый, >5 — акцентный."""
     if qty <= 3:
         return "#ff8080"
     elif qty <= 5:
@@ -261,7 +247,6 @@ def _get_indicator_color(qty):
 
 
 def _get_indicator_icon(qty):
-    """Иконка: >20 ✅, 6–20 ⚠️, ≤5 ❌."""
     if qty > 20:
         return "✅"
     elif qty > 5:
@@ -270,9 +255,6 @@ def _get_indicator_icon(qty):
         return "❌"
 
 
-# ==========================================================
-#  ФОРМАТИРОВАНИЕ
-# ==========================================================
 def _format_duration(seconds):
     minutes = seconds // 60
     secs = seconds % 60
@@ -294,15 +276,20 @@ def _truncate_title(title, max_length=60):
 
 
 # ==========================================================
-#  ОТКРЫТИЕ ФОРМЫ ПРОСМОТРА
+#  ЗАДАНИЕ 5.5 — ОТКРЫТИЕ ФОРМЫ С REFRESH
 # ==========================================================
-def _open_view(parent, product):
-    """Открывает форму просмотра товара при клике на карточку."""
+def _open_view(parent, product, refresh=None):
+    """
+    Открывает форму просмотра товара.
+
+    :param parent: виджет-родитель (карточка)
+    :param product: кортеж товара
+    :param refresh: callback для обновления каталога
+    """
     try:
         from view_form import ViewForm
         root = parent.winfo_toplevel()
-        callback = getattr(root, "add_to_order", None)
-        ViewForm(root, product, on_add_to_order=callback)
+        ViewForm(root, product, on_add_to_order=refresh)
     except Exception as e:
         print(f"[DEBUG] Ошибка открытия формы: {e}")
         import traceback

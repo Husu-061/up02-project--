@@ -10,6 +10,11 @@ from resources import get_product_image
 from discount import calculate_price_with_discount
 from utils import format_price
 from error_handler import validate_positive_int, safe_call
+from order_manager import (
+    add_order_to_db,
+    update_product_quantity,
+    get_product_quantity,
+)
 
 
 class ViewForm:
@@ -30,7 +35,6 @@ class ViewForm:
         self.window.lift()
         self.window.focus_force()
 
-        # Закрытие по Esc
         self.window.bind("<Escape>", lambda e: self.window.destroy())
 
         self.build_ui()
@@ -39,7 +43,6 @@ class ViewForm:
     #  ПОСТРОЕНИЕ ИНТЕРФЕЙСА
     # ==========================================================
     def build_ui(self):
-        """Строит интерфейс формы."""
         # ===== Шапка =====
         header = tk.Frame(self.window, bg=COLOR_SECONDARY_BG, height=60)
         header.pack(fill="x")
@@ -74,7 +77,7 @@ class ViewForm:
         info_frame = tk.Frame(main, bg=COLOR_MAIN_BG)
         info_frame.pack(side="left", fill="both", expand=True, padx=20)
 
-        # Распаковка полей (по индексам — надёжно при любом количестве)
+        # Распаковка по индексам
         product_id = self.product[0]
         genre      = self.product[1]
         artist     = self.product[2]
@@ -84,12 +87,11 @@ class ViewForm:
         qty        = self.product[6]
         cover      = self.product[7]
 
-        # Описание — если есть 9-й элемент (Задание 1)
         description = None
         if len(self.product) > 8:
             description = self.product[8]
 
-        # Проверки крайних случаев
+        # Защита
         artist_safe   = artist if artist else "[Без исполнителя]"
         title_safe    = title  if title  else "[Без названия]"
         genre_safe    = genre  if genre  else "[Без жанра]"
@@ -108,7 +110,7 @@ class ViewForm:
                         f"{qty_safe} шт. ({self._indicator(qty_safe)})")
         self._add_field(info_frame, "Описание", desc_safe)
 
-        # Цена со скидкой
+        # Цена
         final_price = safe_call(calculate_price_with_discount,
                                 product_id, price_safe)
         if final_price is None:
@@ -120,7 +122,7 @@ class ViewForm:
             price_text = f"{format_price(price_safe)} руб."
         self._add_field(info_frame, "Цена", price_text, bold=True)
 
-        # ===== Поле ввода количества (Задание 2) =====
+        # ===== Поле ввода количества =====
         input_frame = tk.Frame(info_frame, bg=COLOR_MAIN_BG)
         input_frame.pack(fill="x", pady=(15, 5))
 
@@ -160,10 +162,9 @@ class ViewForm:
                   cursor="hand2").pack(side="right", padx=20)
 
     # ==========================================================
-    #  ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+    #  ВСПОМОГАТЕЛЬНЫЕ
     # ==========================================================
     def _add_field(self, parent, label, value, bold=False):
-        """Добавляет поле «Метка: значение» в форму."""
         row = tk.Frame(parent, bg=COLOR_MAIN_BG)
         row.pack(fill="x", pady=4)
 
@@ -179,13 +180,11 @@ class ViewForm:
                  justify="left").pack(side="left", fill="x")
 
     def _format_duration(self, seconds):
-        """Секунды → М:СС."""
         minutes = seconds // 60
         secs = seconds % 60
         return f"{minutes}:{secs:02d}"
 
     def _indicator(self, qty):
-        """Индикатор количества (3 уровня)."""
         if qty > 20:
             return "много"
         elif qty > 5:
@@ -193,11 +192,8 @@ class ViewForm:
         else:
             return "мало"
 
-    # ==========================================================
-    #  ПРОВЕРКА КОЛИЧЕСТВА
-    # ==========================================================
     def check_quantity(self):
-        """Проверяет ввод количества через validate_positive_int."""
+        """Проверяет ввод количества."""
         value = self.qty_entry.get()
         ok, result = validate_positive_int(value, "Количество")
 
@@ -209,51 +205,75 @@ class ViewForm:
         else:
             messagebox.showwarning(
                 "Ошибка ввода",
-                str(result)     # ← str() для Pylance
+                str(result)
             )
 
     # ==========================================================
-    #  ДОБАВЛЕНИЕ В ЗАКАЗ
+    #  ЗАДАНИЕ 5.4 — ДОБАВЛЕНИЕ В ЗАКАЗ
     # ==========================================================
     def add_to_order(self):
         """Обработчик кнопки «Добавить в заказ»."""
-        # 1. Проверяем ввод количества
+        # 1. Проверка товара
+        if not self.product:
+            messagebox.showerror("Ошибка", "Товар не выбран")
+            return
+
+        # 2. Проверяем ввод количества
         value = self.qty_entry.get()
         ok, result = validate_positive_int(value, "Количество")
 
         if not ok:
-            messagebox.showwarning("Ошибка ввода", str(result))   # ← str()
+            messagebox.showwarning("Ошибка ввода", str(result))
             return
 
-        # 2. Проверка callback
-        if not self.on_add_to_order:
-            messagebox.showinfo(
-                "Информация",
-                "Функция в разработке"
-            )
-            return
+        quantity = int(result) 
 
-        # 3. Проверка товара
-        if not self.product:
-            messagebox.showerror(
-                "Ошибка",
-                "Товар не выбран"
-            )
-            return
-
-        # 4. Вызов callback
         try:
-            self.on_add_to_order(self.product, result)
-            messagebox.showinfo(
-                "Успех",
-                f"Добавлено {result} шт. товара «{self.product[3]}»"
+            product_id = self.product[0]
+
+            # 3. Проверяем остаток
+            current_qty = int(get_product_quantity(product_id))
+
+            if current_qty < quantity:
+                messagebox.showwarning(
+                    "Товар закончился",
+                    f"В наличии только {current_qty} шт."
+                )
+                return
+
+            # 4. Создаём заказ
+            order_id = add_order_to_db(
+                "Иванов Иван Иванович",
+                product_id,
+                quantity
             )
-        except TypeError:
-            # Если callback не принимает второй аргумент
-            self.on_add_to_order(self.product)
-            messagebox.showinfo("Успех", "Товар добавлен в заказ")
+
+            if order_id is None:
+                messagebox.showerror("Ошибка", "Не удалось создать заказ")
+                return
+
+            # 5. Обновляем остаток
+            new_qty = current_qty - quantity
+            update_product_quantity(product_id, new_qty)
+
+            # 6. Успех
+            messagebox.showinfo(
+                "Заказ оформлен",
+                f"Заказ №{order_id} на {quantity} шт. товара «{self.product[3]}»"
+            )
+
+            # 7. Обновляем каталог (если callback передан)
+            if self.on_add_to_order:
+                try:
+                    self.on_add_to_order()
+                except TypeError:
+                    self.on_add_to_order(self.product, quantity)
+
+            # 8. Закрываем форму
+            self.window.destroy()
+
         except Exception as e:
             messagebox.showerror(
                 "Ошибка заказа",
-                f"Не удалось добавить товар:\n{e}"
+                f"Не удалось оформить заказ:\n{e}"
             )
