@@ -28,31 +28,27 @@ class CatalogWindow:
         self.root.geometry("1300x750")
         self.root.configure(bg=COLOR_MAIN_BG)
 
-        # Центрируем окно на экране
+        # Центрируем окно
         self.root.update_idletasks()
-        w = 1300
-        h = 750
+        w, h = 1300, 750
         x = (self.root.winfo_screenwidth() - w) // 2
         y = (self.root.winfo_screenheight() - h) // 2
         self.root.geometry(f"{w}x{h}+{x}+{y}")
 
         self.set_icon()
 
-        # ===== Пользователь (заполнится после авторизации) =====
-        self.current_user = None   # (id, логин, фио, роль)
+        self.current_user = None
 
-        # ===== Переменные — создаём сразу =====
+        # Переменные — создаём сразу
         self.search_var = tk.StringVar()
         self.category_var = tk.StringVar(value="Все категории")
         self.sort_var = tk.StringVar(value="Без сортировки")
 
-        # Пагинация
         self.page_size = 5
         self.current_page = 0
         self.filtered_products = []
 
-        # ===== Пока окно пустое — показываем только авторизацию =====
-        # Создаём заглушку, которую заменим после входа
+        # Заглушка до авторизации
         self.placeholder = tk.Label(
             self.root,
             text="⏳ Ожидание авторизации...",
@@ -61,7 +57,6 @@ class CatalogWindow:
         )
         self.placeholder.pack(expand=True)
 
-        # Через 100 мс показываем окно авторизации
         self.root.after(100, self.show_auth_window)
 
     # ==========================================================
@@ -94,49 +89,37 @@ class CatalogWindow:
             return None
 
     # ==========================================================
-    #  ОКНО АВТОРИЗАЦИИ — открывается через after()
+    #  АВТОРИЗАЦИЯ
     # ==========================================================
     def show_auth_window(self):
-        """Открывает окно авторизации поверх главного."""
+        """Открывает окно авторизации."""
         try:
             from auth import AuthWindow
             AuthWindow(self.root, self.on_login_success)
             logger.info("Окно авторизации открыто")
         except Exception as e:
-            logger.critical(f"Ошибка открытия авторизации: {e}", exc_info=True)
-            messagebox.showerror(
-                "Ошибка",
-                f"Не удалось открыть окно авторизации:\n{e}"
-            )
+            logger.critical(f"Ошибка авторизации: {e}", exc_info=True)
+            messagebox.showerror("Ошибка",
+                                 f"Не удалось открыть окно авторизации:\n{e}")
             self.root.destroy()
 
-    # ==========================================================
-    #  ОБРАБОТЧИК УСПЕШНОГО ВХОДА
-    # ==========================================================
     def on_login_success(self, user):
-        """
-        Обработчик успешной авторизации.
-
-        :param user: (id, логин, фио, роль)
-        """
+        """Обработчик успешного входа."""
         self.current_user = user
         logger.info(f"Авторизация: {user[1]} — {user[3]}")
 
-        # Убираем заглушку
         self.placeholder.destroy()
 
-        # Привязки переменных
         self.search_var.trace_add("write", lambda *a: self.refresh_catalog())
         self.category_var.trace_add("write", lambda *a: self.refresh_catalog())
         self.sort_var.trace_add("write", lambda *a: self.refresh_catalog())
 
-        # Строим интерфейс и загружаем каталог
         self.build_ui()
         self.refresh_catalog()
         logger.info("Приложение готово")
 
     # ==========================================================
-    #  ПОСТРОЕНИЕ ИНТЕРФЕЙСА
+    #  ИНТЕРФЕЙС
     # ==========================================================
     def build_ui(self):
         # ============ 1. ШАПКА ============
@@ -198,7 +181,7 @@ class CatalogWindow:
                   relief="flat", padx=8, pady=3,
                   cursor="hand2").pack(side="left", padx=3)
 
-        # ===== КНОПКА «ЗАКАЗЫ» — ТОЛЬКО МЕНЕДЖЕР / АДМИНИСТРАТОР =====
+        # Кнопка «Заказы» — только Менеджер/Администратор
         if self.current_user and self.current_user[3] in ("Менеджер", "Администратор"):
             tk.Button(header, text="📋 Заказы",
                       command=self.open_orders,
@@ -207,7 +190,7 @@ class CatalogWindow:
                       relief="flat", padx=8, pady=3,
                       cursor="hand2").pack(side="left", padx=3)
 
-        # Информация о пользователе — справа
+        # Информация о пользователе
         if self.current_user:
             user_info = f"👤 {self.current_user[2]} ({self.current_user[3]})"
             tk.Label(header, text=user_info,
@@ -275,7 +258,7 @@ class CatalogWindow:
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     # ==========================================================
-    #  ТЁМНАЯ ТЕМА
+    #  ТЕМА
     # ==========================================================
     def toggle_theme(self):
         current = self.root.cget("bg")
@@ -287,7 +270,7 @@ class CatalogWindow:
         self.refresh_catalog()
 
     # ==========================================================
-    #  РАБОТА С БД
+    #  БД
     # ==========================================================
     def get_categories(self):
         conn = sqlite3.connect(DB_PATH)
@@ -310,7 +293,7 @@ class CatalogWindow:
         return safe_call(self.get_categories) or []
 
     # ==========================================================
-    #  ЗАГРУЗКА КАТАЛОГА
+    #  ЗАГРУЗКА
     # ==========================================================
     def refresh_catalog(self):
         try:
@@ -394,7 +377,6 @@ class CatalogWindow:
             initialfile="catalog_export.csv"
         )
         if not path:
-            logger.info("Экспорт отменён")
             return
 
         def _write_csv():
@@ -406,29 +388,25 @@ class CatalogWindow:
                 ])
                 for p in self.filtered_products:
                     writer.writerow(p)
-            logger.info(f"Экспортировано {len(self.filtered_products)} в {path}")
             print(f"✅ Экспортировано в {path}")
 
         safe_call(_write_csv)
 
     # ==========================================================
-    #  ОТКРЫТИЕ ОКНА ЗАКАЗОВ
+    #  ЗАКАЗЫ
     # ==========================================================
     def open_orders(self):
-        """Открывает окно списка заказов (только Менеджер/Администратор)."""
+        """Открывает окно заказов (передаёт user)."""
         if not self.current_user or self.current_user[3] not in ("Менеджер", "Администратор"):
-            messagebox.showerror(
-                "Доступ запрещён",
-                "У вас нет прав для просмотра заказов."
-            )
+            messagebox.showerror("Доступ запрещён", "У вас нет прав.")
             return
 
         try:
             from orders_window import OrdersWindow
-            OrdersWindow(self.root)
+            OrdersWindow(self.root, user=self.current_user)
             logger.info(f"Открыто окно заказов ({self.current_user[1]})")
         except Exception as e:
-            logger.error(f"Ошибка открытия окна заказов: {e}", exc_info=True)
+            logger.error(f"Ошибка: {e}", exc_info=True)
 
     # ==========================================================
     #  ЗАПУСК

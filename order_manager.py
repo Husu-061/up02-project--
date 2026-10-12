@@ -56,29 +56,20 @@ def add_order_item(order_id, product_id, format_name, quantity, price):
 
 
 # ==========================================================
-#  ЗАДАНИЕ 5.3 — CREATE_ORDER С ТРАНЗАКЦИЕЙ
+#  ПОЛНЫЙ ЦИКЛ — ЗАКАЗ + ПОЗИЦИИ В ОДНОЙ ТРАНЗАКЦИИ
 # ==========================================================
 def create_order(client, items):
     """
-    Создаёт заказ с несколькими позициями ЗА ОДНУ ТРАНЗАКЦИЮ.
-
-    Три действия:
-    1. Создаёт «шапку» заказа.
-    2. Добавляет все позиции в Состав_заказа.
-    3. Уменьшает остатки в Товар.
-
-    При ошибке — rollback откатывает ВСЁ.
+    Создаёт заказ с несколькими позициями за одну транзакцию.
 
     :param client: ФИО клиента
-    :param items: список кортежей
-        (product_id, format, quantity, price)
-    :return: id заказа или None при ошибке
+    :param items: список кортежей (product_id, format, quantity, price)
+    :return: id заказа или None
     """
     conn = get_connection()
     cur = conn.cursor()
 
     try:
-        # ===== 1. Создаём заказ =====
         date = datetime.now().strftime("%Y-%m-%d")
         cur.execute(
             "INSERT INTO Заказ (дата, клиент) VALUES (?, ?)",
@@ -86,25 +77,17 @@ def create_order(client, items):
         )
         order_id = cur.lastrowid
 
-        # ===== 2. Обрабатываем каждую позицию =====
         for product_id, format_name, quantity, price in items:
-            # 2.1. Проверяем наличие товара
-            cur.execute(
-                "SELECT количество FROM Товар WHERE id = ?",
-                (product_id,)
-            )
+            # Проверяем наличие
+            cur.execute("SELECT количество FROM Товар WHERE id = ?", (product_id,))
             row = cur.fetchone()
 
             if not row:
                 raise ValueError(f"Товар id={product_id} не найден")
 
             if row[0] < quantity:
-                raise ValueError(
-                    f"Недостаточно товара id={product_id}: "
-                    f"в наличии {row[0]}, запрошено {quantity}"
-                )
+                raise ValueError(f"Недостаточно товара id={product_id}")
 
-            # 2.2. Добавляем позицию в Состав_заказа
             cur.execute(
                 "INSERT INTO Состав_заказа "
                 "(заказ_id, товар_id, формат, количество, цена) "
@@ -112,29 +95,26 @@ def create_order(client, items):
                 (order_id, product_id, format_name, quantity, price)
             )
 
-            # 2.3. Уменьшаем остаток товара
+            # Уменьшаем остаток
             cur.execute(
                 "UPDATE Товар SET количество = количество - ? WHERE id = ?",
                 (quantity, product_id)
             )
 
-        # ===== 3. Фиксируем ВСЁ =====
         conn.commit()
         return order_id
 
     except Exception as e:
-        # Откат всех изменений при любой ошибке
         conn.rollback()
         print(f"❌ Ошибка создания заказа: {e}")
         return None
 
     finally:
-        # Гарантированно закрываем соединение
         conn.close()
 
 
 # ==========================================================
-#  ПРОСТОЕ ОБНОВЛЕНИЕ КОЛИЧЕСТВА (устанавливает значение)
+#  ОБНОВЛЕНИЕ КОЛИЧЕСТВА
 # ==========================================================
 def update_product_quantity(product_id, new_quantity):
     """Устанавливает новое количество товара."""
@@ -148,17 +128,8 @@ def update_product_quantity(product_id, new_quantity):
     conn.close()
 
 
-# ==========================================================
-#  DECREASE_PRODUCT_QUANTITY (уменьшение на N)
-# ==========================================================
 def decrease_product_quantity(product_id, quantity):
-    """
-    Уменьшает количество товара на складе.
-
-    :param product_id: id товара
-    :param quantity: на сколько уменьшить
-    :return: True при успехе, False при ошибке
-    """
+    """Уменьшает количество товара на складе."""
     conn = get_connection()
     cur = conn.cursor()
 
@@ -167,12 +138,10 @@ def decrease_product_quantity(product_id, quantity):
         row = cur.fetchone()
 
         if not row:
-            print(f"[DEBUG] Товар id={product_id} не найден")
             return False
 
         current = row[0]
         if current is None or current < quantity:
-            print(f"[DEBUG] Недостаточно товара: {current} < {quantity}")
             return False
 
         cur.execute(
@@ -215,60 +184,10 @@ def get_product_quantity(product_id):
 
 
 # ==========================================================
-#  ТЕСТИРОВАНИЕ
+#  ВСЕ ЗАКАЗЫ
 # ==========================================================
-if __name__ == "__main__":
-    print("=" * 60)
-    print("ТЕСТИРОВАНИЕ order_manager.py")
-    print("=" * 60)
-
-    print("\n[1] Проверка create_order с транзакцией...")
-    qty1_before = get_product_quantity(1)
-    qty2_before = get_product_quantity(2)
-    print(f"    Товар 1 до: {qty1_before} шт.")
-    print(f"    Товар 2 до: {qty2_before} шт.")
-
-    items = [
-        (1, "MP3",  2, 100),
-        (2, "FLAC", 1, 120),
-    ]
-    order_id = create_order("Иванов Иван Иванович", items)
-    print(f"    Заказ создан: id={order_id}")
-
-    qty1_after = get_product_quantity(1)
-    qty2_after = get_product_quantity(2)
-    print(f"    Товар 1 после: {qty1_after} шт. (-{qty1_before - qty1_after})")
-    print(f"    Товар 2 после: {qty2_after} шт. (-{qty2_before - qty2_after})")
-
-    print("\n[2] Проверка rollback — недостаточно товара...")
-    qty1_before2 = get_product_quantity(1)
-    bad_items = [
-        (1, "MP3",  1, 100),
-        (4, "MP3", 9999, 150),   # Не хватит
-    ]
-    bad_order = create_order("Тестов Тест", bad_items)
-    print(f"    Заказ: {bad_order} (ожидалось None)")
-
-    qty1_after2 = get_product_quantity(1)
-    print(f"    Товар 1 после ошибки: {qty1_after2} шт. "
-          f"(ожидалось {qty1_before2})")
-
-    if qty1_before2 == qty1_after2:
-        print("    ✅ Rollback сработал — остаток не изменился")
-    else:
-        print("    ❌ Rollback не сработал!")
-
-    print("\n" + "=" * 60)
-    print("Тестирование завершено")
-    print("=" * 60)
-
-
 def get_all_orders():
-    """
-    Возвращает список всех заказов.
-
-    :return: список кортежей (id, дата, клиент)
-    """
+    """Возвращает список всех заказов."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id, дата, клиент FROM Заказ ORDER BY id DESC")
@@ -277,7 +196,9 @@ def get_all_orders():
     return rows
 
 
-
+# ==========================================================
+#  СОСТАВ ЗАКАЗА (JOIN)
+# ==========================================================
 def get_order_items(order_id):
     """
     Возвращает состав заказа с полной информацией.
@@ -305,8 +226,9 @@ def get_order_items(order_id):
     conn.close()
     return rows
 
+
 # ==========================================================
-#  ЗАДАНИЕ 4 — ИТОГОВАЯ СУММА ЗАКАЗА
+#  ИТОГОВАЯ СУММА ЗАКАЗА
 # ==========================================================
 def get_order_total(order_id):
     """
@@ -317,11 +239,152 @@ def get_order_total(order_id):
     """
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(
-        "SELECT SUM(количество * цена) FROM Состав_заказа "
-        "WHERE заказ_id = ?",
-        (order_id,)
-    )
+    cur.execute("""
+        SELECT SUM(количество * цена)
+        FROM Состав_заказа
+        WHERE заказ_id = ?
+    """, (order_id,))
     row = cur.fetchone()
     conn.close()
-    return row[0] if row and row[0] else 0
+    return row[0] or 0.0
+
+
+# ==========================================================
+#  ЗАКАЗ ПО ID
+# ==========================================================
+def get_order_by_id(order_id):
+    """
+    Возвращает заказ по id.
+
+    :param order_id: id заказа
+    :return: кортеж (id, дата, клиент) или None
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, дата, клиент FROM Заказ WHERE id = ?",
+                (order_id,))
+    row = cur.fetchone()
+    conn.close()
+    return row
+
+
+# ==========================================================
+#  ЗАДАНИЕ 4 — ИЗМЕНЕНИЕ ДАТЫ ЗАКАЗА
+# ==========================================================
+def update_order_date(order_id, new_date):
+    """
+    Обновляет дату заказа.
+
+    :param order_id: id заказа
+    :param new_date: новая дата (YYYY-MM-DD)
+    :return: True при успехе, False при ошибке
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            "UPDATE Заказ SET дата = ? WHERE id = ?",
+            (new_date, order_id)
+        )
+        conn.commit()
+        return True
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Ошибка обновления даты: {e}")
+        return False
+
+    finally:
+        conn.close()
+
+
+# ==========================================================
+#  ЗАДАНИЕ 5 — УДАЛЕНИЕ ПОЗИЦИИ
+# ==========================================================
+def delete_order_item(item_id):
+    """
+    Удаляет позицию из состава заказа и восстанавливает остаток.
+
+    :param item_id: id позиции
+    :return: True при успехе, False при ошибке
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        # 1. Получаем данные позиции
+        cur.execute("""
+            SELECT товар_id, количество
+            FROM Состав_заказа
+            WHERE id = ?
+        """, (item_id,))
+        row = cur.fetchone()
+
+        if not row:
+            print(f"[DEBUG] Позиция id={item_id} не найдена")
+            return False
+
+        product_id, quantity = row
+
+        # 2. Удаляем позицию
+        cur.execute("DELETE FROM Состав_заказа WHERE id = ?", (item_id,))
+
+        # 3. Восстанавливаем остаток
+        cur.execute("""
+            UPDATE Товар
+            SET количество = количество + ?
+            WHERE id = ?
+        """, (quantity, product_id))
+
+        conn.commit()
+        return True
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Ошибка удаления позиции: {e}")
+        return False
+
+    finally:
+        conn.close()
+
+
+# ==========================================================
+#  ТЕСТИРОВАНИЕ
+# ==========================================================
+if __name__ == "__main__":
+    print("=" * 60)
+    print("ТЕСТИРОВАНИЕ order_manager.py")
+    print("=" * 60)
+
+    # Тест 4.5 — обновление даты
+    print("\n[1] Проверка update_order_date...")
+    order = get_order_by_id(21)
+    print(f"    Заказ до: {order}")
+
+    ok = update_order_date(21, "2026-10-08")
+    print(f"    update_order_date(21, '2026-10-08') → {ok}")
+
+    order = get_order_by_id(21)
+    print(f"    Заказ после: {order}")
+
+    # Вернуть обратно
+    update_order_date(21, "2026-10-12")
+    print(f"    Дата возвращена: {get_order_by_id(21)}")
+
+    # Тест 5.5 — удаление позиции
+    print("\n[2] Проверка delete_order_item...")
+    items_before = get_order_items(21)
+    print(f"    Позиций до: {len(items_before)}")
+
+    if items_before:
+        item_id = items_before[0][0]
+        ok = delete_order_item(item_id)
+        print(f"    delete_order_item({item_id}) → {ok}")
+
+    items_after = get_order_items(21)
+    print(f"    Позиций после: {len(items_after)}")
+
+    print("\n" + "=" * 60)
+    print("Тестирование завершено")
+    print("=" * 60)
