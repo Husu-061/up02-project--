@@ -90,7 +90,7 @@ class ViewForm:
         if len(self.product) > 8:
             description = self.product[8]
 
-        # Защита от None
+        # Защита
         artist_safe   = artist if artist else "[Без исполнителя]"
         title_safe    = title  if title  else "[Без названия]"
         genre_safe    = genre  if genre  else "[Без жанра]"
@@ -182,7 +182,7 @@ class ViewForm:
                   cursor="hand2").pack(side="right", padx=20)
 
     # ==========================================================
-    #  ВСПОМОГАТЕЛЬНЫЕ
+    #  ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
     # ==========================================================
     def _add_field(self, parent, label, value, bold=False):
         row = tk.Frame(parent, bg=COLOR_MAIN_BG)
@@ -252,7 +252,7 @@ class ViewForm:
             messagebox.showwarning("Ошибка ввода", str(result))
 
     # ==========================================================
-    #  ЗАДАНИЕ 5 — ДОБАВЛЕНИЕ В ЗАКАЗ (новая схема)
+    #  ЗАДАНИЕ 6.5 — ДОБАВЛЕНИЕ В ЗАКАЗ С CALLBACK
     # ==========================================================
     def add_to_order(self):
         """Обработчик кнопки «Добавить в заказ»."""
@@ -260,7 +260,7 @@ class ViewForm:
             messagebox.showerror("Ошибка", "Товар не выбран")
             return
 
-        # 1. Валидация
+        # 1. Валидация количества
         ok, result = validate_positive_int(self.qty_var.get(), "Количество")
         if not ok:
             messagebox.showwarning("Ошибка ввода", str(result))
@@ -281,13 +281,13 @@ class ViewForm:
                 )
                 return
 
-            # 3. Создаём «шапку» заказа
+            # 3. Создаём заказ
             order_id = add_order_to_db("Иванов Иван Иванович")
             if order_id is None:
                 messagebox.showerror("Ошибка", "Не удалось создать заказ")
                 return
 
-            # 4. Добавляем позицию в Состав_заказа
+            # 4. Добавляем позицию
             item_id = add_order_item(
                 order_id,
                 product_id,
@@ -295,21 +295,20 @@ class ViewForm:
                 qty,
                 price
             )
-
             if item_id is None:
                 messagebox.showerror("Ошибка", "Не удалось добавить позицию")
                 return
 
-            # 5. Обновляем остаток товара
+            # 5. Уменьшаем остаток
             new_qty = current_qty - qty
             update_product_quantity(product_id, new_qty)
 
-            # 6. Callback для обновления каталога
+            # 6. ===== Вызов callback для обновления каталога =====
             if self.on_add_to_order:
                 try:
-                    self.on_add_to_order(self.product, qty)
-                except TypeError:
                     self.on_add_to_order()
+                except TypeError:
+                    self.on_add_to_order(self.product, qty)
 
             # 7. Успех
             fmt = self.format_var.get()

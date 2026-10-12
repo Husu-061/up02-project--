@@ -46,6 +46,9 @@ class CatalogWindow:
         self.refresh_catalog()
         logger.info("Приложение запущено")
 
+    # ==========================================================
+    #  ИКОНКА
+    # ==========================================================
     def set_icon(self):
         try:
             if os.name == "nt":
@@ -73,13 +76,15 @@ class CatalogWindow:
             return None
 
     # ==========================================================
-    #  ИНТЕРФЕЙС
+    #  ПОСТРОЕНИЕ ИНТЕРФЕЙСА
     # ==========================================================
     def build_ui(self):
+        # ===== ШАПКА =====
         header = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=80)
         header.pack(fill="x", side="top")
         header.pack_propagate(False)
 
+        # Логотип
         logo = self.load_logo_proportional("resources/logo.png", max_size=(60, 60))
         if logo:
             self.logo_label = tk.Label(header, image=logo, bg=COLOR_SECONDARY_BG)
@@ -91,15 +96,18 @@ class CatalogWindow:
                                         font=font(FONT_SIZE_NORMAL))
             self.logo_label.pack(side="left", padx=15)
 
+        # Заголовок
         tk.Label(header, text="КАТАЛОГ ТОВАРОВ",
                  font=font(FONT_SIZE_TITLE, bold=True),
                  bg=COLOR_SECONDARY_BG).pack(side="left", pady=15, padx=(0, 15))
 
+        # Поиск
         tk.Label(header, text="🔍", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left")
         tk.Entry(header, textvariable=self.search_var, width=12,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=5)
 
+        # Жанр
         tk.Label(header, text="Жанр:", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(5, 5))
         categories = ["Все категории"] + self.load_categories_safe()
@@ -107,12 +115,14 @@ class CatalogWindow:
                      values=categories, state="readonly",
                      width=10).pack(side="left", padx=5)
 
+        # Сортировка
         tk.Label(header, text="Сорт.:", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(5, 5))
         ttk.Combobox(header, textvariable=self.sort_var,
                      values=["Без сортировки", "Цена ↑", "Цена ↓", "Название А-Я"],
                      state="readonly", width=13).pack(side="left", padx=5)
 
+        # CSV
         tk.Button(header, text="📥 CSV",
                   command=self.export_to_csv,
                   bg=COLOR_ACCENT, fg="white",
@@ -120,6 +130,7 @@ class CatalogWindow:
                   relief="flat", padx=8, pady=3,
                   cursor="hand2").pack(side="left", padx=3)
 
+        # Тема
         tk.Button(header, text="🌙",
                   command=self.toggle_theme,
                   bg=COLOR_ACCENT, fg="white",
@@ -127,6 +138,7 @@ class CatalogWindow:
                   relief="flat", padx=8, pady=3,
                   cursor="hand2").pack(side="left", padx=3)
 
+        # Статистика
         self.count_label = tk.Label(header, text="Товаров: 0",
                                      bg=COLOR_SECONDARY_BG,
                                      font=font(FONT_SIZE_NORMAL, bold=True))
@@ -137,7 +149,7 @@ class CatalogWindow:
                                      font=font(FONT_SIZE_NORMAL, bold=True))
         self.stats_label.pack(side="right", padx=15)
 
-        # Пагинация
+        # ===== ПАНЕЛЬ ПАГИНАЦИИ =====
         pagination_frame = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=45)
         pagination_frame.pack(fill="x", side="bottom")
         pagination_frame.pack_propagate(False)
@@ -161,7 +173,7 @@ class CatalogWindow:
                   relief="flat", padx=20, pady=5,
                   cursor="hand2").pack(side="right", padx=15, pady=8)
 
-        # Canvas
+        # ===== CANVAS =====
         self.canvas = tk.Canvas(self.root, bg=COLOR_MAIN_BG, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.root, orient="vertical",
                                    command=self.canvas.yview)
@@ -186,12 +198,16 @@ class CatalogWindow:
     def _on_mousewheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
+    # ==========================================================
+    #  ТЕМА
+    # ==========================================================
     def toggle_theme(self):
         current = self.root.cget("bg")
         new_bg = "#2E2E2E" if current == COLOR_MAIN_BG else COLOR_MAIN_BG
         self.root.configure(bg=new_bg)
         self.canvas.configure(bg=new_bg)
         self.catalog_frame.configure(bg=new_bg)
+        logger.info(f"Тема: {new_bg}")
         self.refresh_catalog()
 
     # ==========================================================
@@ -218,20 +234,31 @@ class CatalogWindow:
         return safe_call(self.get_categories) or []
 
     # ==========================================================
-    #  ЗАГРУЗКА КАТАЛОГА
+    #  ЗАГРУЗКА КАТАЛОГА (Задание 6.2)
     # ==========================================================
     def refresh_catalog(self):
+        """
+        Обновляет каталог: фильтры, статистика, перерисовка.
+
+        Вызывается:
+        - при старте;
+        - при изменении фильтров;
+        - после оформления заказа (через callback).
+        """
         try:
             products = safe_call(self.get_all_products) or []
 
+            # Фильтр
             category = self.category_var.get()
             if category and category != "Все категории":
                 products = [p for p in products if p[1] == category]
 
+            # Поиск
             query = self.search_var.get()
             if query:
                 products = [p for p in products if matches_query(p, query)]
 
+            # Сортировка
             order = self.sort_var.get()
             if order == "Цена ↑":
                 products.sort(key=lambda p: p[5] or 0)
@@ -240,8 +267,10 @@ class CatalogWindow:
             elif order == "Название А-Я":
                 products.sort(key=lambda p: p[3] or "")
 
+            # Счётчик
             self.count_label.config(text=f"Товаров: {len(products)}")
 
+            # Статистика
             many   = sum(1 for p in products if (p[6] or 0) > 20)
             middle = sum(1 for p in products if 5 < (p[6] or 0) <= 20)
             few    = sum(1 for p in products if (p[6] or 0) <= 5)
@@ -255,7 +284,7 @@ class CatalogWindow:
             logger.error(f"Ошибка каталога: {e}", exc_info=True)
 
     # ==========================================================
-    #  ПАГИНАЦИЯ (передаём refresh=self.refresh_catalog)
+    #  ПАГИНАЦИЯ (Задание 6.3 — передаём refresh)
     # ==========================================================
     def render_page(self):
         for widget in self.catalog_frame.winfo_children():
@@ -266,8 +295,8 @@ class CatalogWindow:
         end = start + self.page_size
         page_products = self.filtered_products[start:end]
 
+        # ===== Передаём refresh=self.refresh_catalog =====
         for i, p in enumerate(page_products):
-            # ===== Передаём callback refresh_catalog =====
             safe_call(create_product_card, self.catalog_frame, p,
                       index=i, refresh=self.refresh_catalog)
 

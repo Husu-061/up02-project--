@@ -82,10 +82,17 @@ class ToolTip:
 
 
 # ==========================================================
-#  ОСНОВНАЯ ФУНКЦИЯ (Задание 5.6 — принимает refresh)
+#  ОСНОВНАЯ ФУНКЦИЯ — принимает callback refresh (Задание 6.3)
 # ==========================================================
 def create_product_card(parent, product, index=0, refresh=None):
-    """Создаёт карточку товара по макету."""
+    """
+    Создаёт карточку товара по макету.
+
+    :param parent: родительский контейнер
+    :param product: кортеж из БД
+    :param index: порядковый номер (для чередования фона)
+    :param refresh: callback для обновления каталога после заказа
+    """
     product_id, genre, artist, title, duration, price, qty, cover = product[:8]
     qty_safe = qty if qty is not None else 0
     bg_color = _get_card_color(qty_safe, index)
@@ -109,7 +116,7 @@ def create_product_card(parent, product, index=0, refresh=None):
     )
     ToolTip(card, tooltip_text)
 
-    # ===== Рекурсивная привязка клика с передачей refresh =====
+    # ===== Задание 6.3 — передаём refresh в привязку клика =====
     _bind_click_recursive(card, parent, product, refresh)
 
     card.bind("<Enter>", lambda e: card.configure(cursor="hand2"))
@@ -119,18 +126,19 @@ def create_product_card(parent, product, index=0, refresh=None):
 
 
 # ==========================================================
-#  РЕКУРСИВНАЯ ПРИВЯЗКА КЛИКА
+#  РЕКУРСИВНАЯ ПРИВЯЗКА КЛИКА (с refresh)
 # ==========================================================
 def _bind_click_recursive(widget, parent, product, refresh=None):
     """Рекурсивно привязывает клик ко всем вложенным виджетам."""
-    widget.bind("<Button-1>", lambda e: _open_view(parent, product, refresh))
+    widget.bind("<Button-1>",
+                lambda e: _open_view(parent, product, refresh))
 
     for child in widget.winfo_children():
         _bind_click_recursive(child, parent, product, refresh)
 
 
 # ==========================================================
-#  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+#  ВСПОМОГАТЕЛЬНЫЕ
 # ==========================================================
 def _get_card_color(qty, index):
     if qty <= 3:
@@ -276,13 +284,13 @@ def _truncate_title(title, max_length=60):
 
 
 # ==========================================================
-#  ЗАДАНИЕ 5.5 — ОТКРЫТИЕ ФОРМЫ С REFRESH
+#  ЗАДАНИЕ 6.4 — ОТКРЫТИЕ ФОРМЫ С REFRESH
 # ==========================================================
 def _open_view(parent, product, refresh=None):
     """
     Открывает форму просмотра товара.
 
-    :param parent: виджет-родитель (карточка)
+    :param parent: виджет-родитель
     :param product: кортеж товара
     :param refresh: callback для обновления каталога
     """
