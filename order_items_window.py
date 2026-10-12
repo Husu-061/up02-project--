@@ -1,4 +1,4 @@
-"""Окно состава заказа."""
+"""Окно состава заказа (музыкальный магазин)."""
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -23,7 +23,7 @@ class OrderItemsWindow:
 
         self.window = tk.Toplevel(parent)
         self.window.title(f"Состав заказа №{order_id}")
-        self.window.geometry("850x500")
+        self.window.geometry("900x550")
         self.window.configure(bg=COLOR_MAIN_BG)
         self.window.transient(parent)
 
@@ -52,21 +52,25 @@ class OrderItemsWindow:
                  font=font(FONT_SIZE_TITLE, bold=True),
                  bg=COLOR_SECONDARY_BG).pack(pady=15)
 
-        # ===== Таблица позиций =====
-        # У вас поле "формат" вместо "размер"
-        columns = ("artist", "name", "format", "quantity", "price", "total")
-        self.tree = ttk.Treeview(self.window, columns=columns,
-                                 show="headings", height=10)
+        # ===== Таблица позиций (6 колонок) =====
+        # У вас: исполнитель вместо «производство», формат вместо «размер»
+        columns = ("name", "artist", "format",
+                   "quantity", "price", "total")
 
-        self.tree.heading("artist",   text="Исполнитель")
+        self.tree = ttk.Treeview(self.window, columns=columns,
+                                 show="headings", height=12)
+
+        # Заголовки
         self.tree.heading("name",     text="Товар")
+        self.tree.heading("artist",   text="Исполнитель")
         self.tree.heading("format",   text="Формат")
         self.tree.heading("quantity", text="Кол-во")
         self.tree.heading("price",    text="Цена")
         self.tree.heading("total",    text="Сумма")
 
+        # Ширина колонок
+        self.tree.column("name",     width=220, anchor="w")
         self.tree.column("artist",   width=150, anchor="w")
-        self.tree.column("name",     width=200, anchor="w")
         self.tree.column("format",   width=80,  anchor="center")
         self.tree.column("quantity", width=70,  anchor="center")
         self.tree.column("price",    width=100, anchor="e")
@@ -82,14 +86,25 @@ class OrderItemsWindow:
         scrollbar.pack(side="right", fill="y", pady=(20, 10), padx=(0, 5))
 
         # ===== Итоговая сумма =====
-        self.total_label = tk.Label(self.window, text="",
-                                     font=font(FONT_SIZE_HEADER, bold=True),
-                                     bg=COLOR_MAIN_BG, fg="black")
-        self.total_label.pack(pady=5)
+        self.total_label = tk.Label(
+            self.window,
+            text="",
+            font=font(FONT_SIZE_HEADER, bold=True),
+            fg=COLOR_ACCENT,
+            bg=COLOR_MAIN_BG
+        )
+        self.total_label.pack(pady=10)
 
         # ===== Кнопки =====
         btn_frame = tk.Frame(self.window, bg=COLOR_MAIN_BG)
         btn_frame.pack(fill="x", pady=10)
+
+        tk.Button(btn_frame, text="🔄 Обновить",
+                  command=self.load_items,
+                  bg=COLOR_ACCENT, fg="white",
+                  font=font(FONT_SIZE_NORMAL),
+                  relief="flat", padx=15, pady=5,
+                  cursor="hand2").pack(side="left", padx=20)
 
         tk.Button(btn_frame, text="← Назад",
                   command=self.window.destroy,
@@ -99,7 +114,7 @@ class OrderItemsWindow:
                   cursor="hand2").pack(side="right", padx=20)
 
     # ==========================================================
-    #  ЗАГРУЗКА ПОЗИЦИЙ (Задание 6.3)
+    #  ЗАГРУЗКА ПОЗИЦИЙ
     # ==========================================================
     def load_items(self):
         """Загружает позиции заказа из БД."""
@@ -109,26 +124,55 @@ class OrderItemsWindow:
 
         try:
             items = om.get_order_items(self.order_id)
-            total = 0.0
 
+            if not items:
+                messagebox.showinfo("Информация", "Заказ пуст")
+                self.total_label.config(text="ИТОГО ПО ЗАКАЗУ: 0.00 руб.")
+                return
+
+            # items = [(id, название, исполнитель, формат, кол-во, цена), ...]
             for item in items:
-                # item = (id, название, исполнитель, формат, кол-во, цена, сумма)
-                name    = item[1]
-                artist  = item[2]
-                fmt     = item[3]
-                qty     = item[4]
-                price   = item[5]
+                name       = item[1]
+                artist     = item[2]
+                format_    = item[3]
+                quantity   = item[4]
+                price      = item[5]
+                item_total = quantity * price
 
-                item_total = qty * price
-                total += item_total
+                self.tree.insert(
+                    "", tk.END,
+                    values=(
+                        name,
+                        artist,
+                        format_,
+                        quantity,
+                        f"{price:.2f}",
+                        f"{item_total:.2f}"
+                    )
+                )
 
-                self.tree.insert("", tk.END, values=(
-                    artist, name, fmt, qty,
-                    f"{price:.2f}", f"{item_total:.2f}"
-                ))
-
-            self.total_label.config(text=f"Итого: {total:.2f} руб.")
+            # ===== Итоговая сумма =====
+            total = om.get_order_total(self.order_id)
+            self.total_label.config(
+                text=f"ИТОГО ПО ЗАКАЗУ: {total:.2f} руб."
+            )
 
         except Exception as e:
-            messagebox.showerror("Ошибка",
-                                 f"Не удалось загрузить состав:\n{e}")
+            messagebox.showerror(
+                "Ошибка",
+                f"Не удалось загрузить состав:\n{e}"
+            )
+
+
+# ==========================================================
+#  ТЕСТИРОВАНИЕ (запуск напрямую)
+# ==========================================================
+if __name__ == "__main__":
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.withdraw()
+
+    # Замените 21 на id существующего заказа
+    OrderItemsWindow(root, 21)
+    root.mainloop()
