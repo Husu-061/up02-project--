@@ -30,14 +30,17 @@ class CatalogWindow:
 
         self.set_icon()
 
+        # Переменные состояния
         self.search_var = tk.StringVar()
         self.category_var = tk.StringVar(value="Все категории")
         self.sort_var = tk.StringVar(value="Без сортировки")
 
+        # Пагинация
         self.page_size = 5
         self.current_page = 0
         self.filtered_products = []
 
+        # Привязки
         self.search_var.trace_add("write", lambda *a: self.refresh_catalog())
         self.category_var.trace_add("write", lambda *a: self.refresh_catalog())
         self.sort_var.trace_add("write", lambda *a: self.refresh_catalog())
@@ -47,9 +50,10 @@ class CatalogWindow:
         logger.info("Приложение запущено")
 
     # ==========================================================
-    #  ИКОНКА
+    #  ИКОНКА ПРИЛОЖЕНИЯ
     # ==========================================================
     def set_icon(self):
+        """Устанавливает иконку приложения (кроссплатформенно)."""
         try:
             if os.name == "nt":
                 if os.path.exists("resources/icon.ico"):
@@ -65,6 +69,7 @@ class CatalogWindow:
             logger.warning(f"Иконка: {e}")
 
     def load_logo_proportional(self, path, max_size=(60, 60)):
+        """Загружает логотип с сохранением пропорций."""
         try:
             if not os.path.exists(path):
                 return None
@@ -77,9 +82,10 @@ class CatalogWindow:
 
     # ==========================================================
     #  ПОСТРОЕНИЕ ИНТЕРФЕЙСА
+    #  Порядок pack(): 1) Шапка  2) Пагинация  3) Canvas
     # ==========================================================
     def build_ui(self):
-        # ===== ШАПКА =====
+        # ============ 1. ШАПКА (сверху) ============
         header = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=80)
         header.pack(fill="x", side="top")
         header.pack_propagate(False)
@@ -107,7 +113,7 @@ class CatalogWindow:
         tk.Entry(header, textvariable=self.search_var, width=12,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=5)
 
-        # Жанр
+        # Фильтр по жанру
         tk.Label(header, text="Жанр:", bg=COLOR_SECONDARY_BG,
                  font=font(FONT_SIZE_NORMAL)).pack(side="left", padx=(5, 5))
         categories = ["Все категории"] + self.load_categories_safe()
@@ -122,7 +128,7 @@ class CatalogWindow:
                      values=["Без сортировки", "Цена ↑", "Цена ↓", "Название А-Я"],
                      state="readonly", width=13).pack(side="left", padx=5)
 
-        # CSV
+        # Кнопка экспорта CSV
         tk.Button(header, text="📥 CSV",
                   command=self.export_to_csv,
                   bg=COLOR_ACCENT, fg="white",
@@ -130,9 +136,17 @@ class CatalogWindow:
                   relief="flat", padx=8, pady=3,
                   cursor="hand2").pack(side="left", padx=3)
 
-        # Тема
+        # Кнопка тёмной темы
         tk.Button(header, text="🌙",
                   command=self.toggle_theme,
+                  bg=COLOR_ACCENT, fg="white",
+                  font=font(FONT_SIZE_NORMAL),
+                  relief="flat", padx=8, pady=3,
+                  cursor="hand2").pack(side="left", padx=3)
+
+        # ===== ЗАДАНИЕ 5.3 — Кнопка «Заказы» =====
+        tk.Button(header, text="📋 Заказы",
+                  command=self.open_orders,
                   bg=COLOR_ACCENT, fg="white",
                   font=font(FONT_SIZE_NORMAL),
                   relief="flat", padx=8, pady=3,
@@ -149,7 +163,7 @@ class CatalogWindow:
                                      font=font(FONT_SIZE_NORMAL, bold=True))
         self.stats_label.pack(side="right", padx=15)
 
-        # ===== ПАНЕЛЬ ПАГИНАЦИИ =====
+        # ============ 2. ПАНЕЛЬ ПАГИНАЦИИ (снизу) ============
         pagination_frame = tk.Frame(self.root, bg=COLOR_SECONDARY_BG, height=45)
         pagination_frame.pack(fill="x", side="bottom")
         pagination_frame.pack_propagate(False)
@@ -173,7 +187,7 @@ class CatalogWindow:
                   relief="flat", padx=20, pady=5,
                   cursor="hand2").pack(side="right", padx=15, pady=8)
 
-        # ===== CANVAS =====
+        # ============ 3. ОБЛАСТЬ ПРОКРУТКИ ============
         self.canvas = tk.Canvas(self.root, bg=COLOR_MAIN_BG, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.root, orient="vertical",
                                    command=self.canvas.yview)
@@ -199,7 +213,7 @@ class CatalogWindow:
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     # ==========================================================
-    #  ТЕМА
+    #  ТЁМНАЯ ТЕМА
     # ==========================================================
     def toggle_theme(self):
         current = self.root.cget("bg")
@@ -211,7 +225,7 @@ class CatalogWindow:
         self.refresh_catalog()
 
     # ==========================================================
-    #  БД
+    #  РАБОТА С БД
     # ==========================================================
     def get_categories(self):
         conn = sqlite3.connect(DB_PATH)
@@ -234,11 +248,11 @@ class CatalogWindow:
         return safe_call(self.get_categories) or []
 
     # ==========================================================
-    #  ЗАГРУЗКА КАТАЛОГА (Задание 6.2)
+    #  ЗАГРУЗКА КАТАЛОГА
     # ==========================================================
     def refresh_catalog(self):
         """
-        Обновляет каталог: фильтры, статистика, перерисовка.
+        Применяет фильтры, обновляет счётчики, перерисовывает каталог.
 
         Вызывается:
         - при старте;
@@ -284,7 +298,7 @@ class CatalogWindow:
             logger.error(f"Ошибка каталога: {e}", exc_info=True)
 
     # ==========================================================
-    #  ПАГИНАЦИЯ (Задание 6.3 — передаём refresh)
+    #  ПАГИНАЦИЯ
     # ==========================================================
     def render_page(self):
         for widget in self.catalog_frame.winfo_children():
@@ -295,7 +309,6 @@ class CatalogWindow:
         end = start + self.page_size
         page_products = self.filtered_products[start:end]
 
-        # ===== Передаём refresh=self.refresh_catalog =====
         for i, p in enumerate(page_products):
             safe_call(create_product_card, self.catalog_frame, p,
                       index=i, refresh=self.refresh_catalog)
@@ -323,7 +336,7 @@ class CatalogWindow:
             self.canvas.yview_moveto(0)
 
     # ==========================================================
-    #  ЭКСПОРТ
+    #  ЭКСПОРТ В CSV
     # ==========================================================
     def export_to_csv(self):
         path = filedialog.asksaveasfilename(
@@ -332,6 +345,7 @@ class CatalogWindow:
             initialfile="catalog_export.csv"
         )
         if not path:
+            logger.info("Экспорт отменён")
             return
 
         def _write_csv():
@@ -343,10 +357,26 @@ class CatalogWindow:
                 ])
                 for p in self.filtered_products:
                     writer.writerow(p)
+            logger.info(f"Экспортировано {len(self.filtered_products)} в {path}")
             print(f"✅ Экспортировано в {path}")
 
         safe_call(_write_csv)
 
+    # ==========================================================
+    #  ЗАДАНИЕ 5.2 — ОТКРЫТИЕ ОКНА ЗАКАЗОВ
+    # ==========================================================
+    def open_orders(self):
+        """Открывает окно списка заказов."""
+        try:
+            from orders_window import OrdersWindow
+            OrdersWindow(self.root)
+            logger.info("Открыто окно списка заказов")
+        except Exception as e:
+            logger.error(f"Ошибка открытия окна заказов: {e}", exc_info=True)
+
+    # ==========================================================
+    #  ЗАПУСК
+    # ==========================================================
     def run(self):
         self.root.mainloop()
 
