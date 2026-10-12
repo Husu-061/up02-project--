@@ -10,7 +10,14 @@ def get_connection():
 
 
 def add_order_to_db(client, product_id, quantity):
-    """Добавляет новый заказ в БД."""
+    """
+    Добавляет новый заказ в БД.
+
+    :param client: ФИО клиента
+    :param product_id: id товара
+    :param quantity: количество
+    :return: id заказа или None при ошибке
+    """
     conn = get_connection()
     cur = conn.cursor()
 

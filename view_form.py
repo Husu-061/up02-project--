@@ -1,6 +1,6 @@
 """Форма просмотра товара (музыкальный магазин)."""
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 
 from styles import (
     COLOR_MAIN_BG, COLOR_SECONDARY_BG, COLOR_ACCENT,
@@ -26,7 +26,7 @@ class ViewForm:
 
         self.window = tk.Toplevel(parent)
         self.window.title(f"Просмотр — {product[3]}")
-        self.window.geometry("800x650")
+        self.window.geometry("800x700")
         self.window.configure(bg=COLOR_MAIN_BG)
         self.window.transient(parent)
 
@@ -35,6 +35,7 @@ class ViewForm:
         self.window.lift()
         self.window.focus_force()
 
+        # Закрытие по Esc
         self.window.bind("<Escape>", lambda e: self.window.destroy())
 
         self.build_ui()
@@ -77,7 +78,7 @@ class ViewForm:
         info_frame = tk.Frame(main, bg=COLOR_MAIN_BG)
         info_frame.pack(side="left", fill="both", expand=True, padx=20)
 
-        # Распаковка по индексам
+        # Распаковка по индексам (БД с 9 полями — с описанием)
         product_id = self.product[0]
         genre      = self.product[1]
         artist     = self.product[2]
@@ -85,13 +86,12 @@ class ViewForm:
         duration   = self.product[4]
         price      = self.product[5]
         qty        = self.product[6]
-        cover      = self.product[7]
 
         description = None
         if len(self.product) > 8:
             description = self.product[8]
 
-        # Защита
+        # Защита от None
         artist_safe   = artist if artist else "[Без исполнителя]"
         title_safe    = title  if title  else "[Без названия]"
         genre_safe    = genre  if genre  else "[Без жанра]"
@@ -110,7 +110,7 @@ class ViewForm:
                         f"{qty_safe} шт. ({self._indicator(qty_safe)})")
         self._add_field(info_frame, "Описание", desc_safe)
 
-        # Цена
+        # Цена со скидкой
         final_price = safe_call(calculate_price_with_discount,
                                 product_id, price_safe)
         if final_price is None:
@@ -122,26 +122,51 @@ class ViewForm:
             price_text = f"{format_price(price_safe)} руб."
         self._add_field(info_frame, "Цена", price_text, bold=True)
 
-        # ===== Поле ввода количества =====
-        input_frame = tk.Frame(info_frame, bg=COLOR_MAIN_BG)
-        input_frame.pack(fill="x", pady=(15, 5))
+        # ==========================================================
+        #  Поле ввода количества (Задание 4.2 — через StringVar)
+        # ==========================================================
+        qty_frame = tk.Frame(info_frame, bg=COLOR_MAIN_BG)
+        qty_frame.pack(fill="x", pady=(15, 5))
 
-        tk.Label(input_frame, text="Кол-во для заказа:",
+        tk.Label(qty_frame, text="Количество:",
                  font=font(FONT_SIZE_NORMAL, bold=True),
                  bg=COLOR_MAIN_BG,
                  width=15, anchor="w").pack(side="left")
 
-        self.qty_entry = tk.Entry(input_frame, width=10,
-                                   font=font(FONT_SIZE_NORMAL))
-        self.qty_entry.pack(side="left", padx=5)
-        self.qty_entry.insert(0, "1")
+        self.qty_var = tk.StringVar(value="1")
+        qty_entry = tk.Entry(qty_frame, textvariable=self.qty_var, width=8,
+                             font=font(FONT_SIZE_NORMAL))
+        qty_entry.pack(side="left", padx=5)
 
-        tk.Button(input_frame, text="Проверить",
+        tk.Button(qty_frame, text="Проверить",
                   command=self.check_quantity,
                   bg=COLOR_ACCENT, fg="white",
                   font=font(FONT_SIZE_NORMAL),
                   relief="flat", padx=10, pady=2,
                   cursor="hand2").pack(side="left", padx=5)
+
+        # ==========================================================
+        #  Выбор формата (аналог «размера» для музыки)
+        # ==========================================================
+        format_frame = tk.Frame(info_frame, bg=COLOR_MAIN_BG)
+        format_frame.pack(fill="x", pady=5)
+
+        tk.Label(format_frame, text="Формат:",
+                 font=font(FONT_SIZE_NORMAL, bold=True),
+                 bg=COLOR_MAIN_BG,
+                 width=15, anchor="w").pack(side="left")
+
+        formats = self.get_product_formats(product_id)
+        if not formats:
+            formats = ["MP3"]
+
+        self.format_var = tk.StringVar(value=formats[0])
+        format_combo = ttk.Combobox(format_frame,
+                                     textvariable=self.format_var,
+                                     values=formats, state="readonly",
+                                     width=10,
+                                     font=font(FONT_SIZE_NORMAL))
+        format_combo.pack(side="left", padx=5)
 
         # ===== Кнопки =====
         btn_frame = tk.Frame(self.window, bg=COLOR_MAIN_BG)
@@ -162,9 +187,10 @@ class ViewForm:
                   cursor="hand2").pack(side="right", padx=20)
 
     # ==========================================================
-    #  ВСПОМОГАТЕЛЬНЫЕ
+    #  ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
     # ==========================================================
     def _add_field(self, parent, label, value, bold=False):
+        """Добавляет поле «Метка: значение» в форму."""
         row = tk.Frame(parent, bg=COLOR_MAIN_BG)
         row.pack(fill="x", pady=4)
 
@@ -180,11 +206,13 @@ class ViewForm:
                  justify="left").pack(side="left", fill="x")
 
     def _format_duration(self, seconds):
+        """Секунды → М:СС."""
         minutes = seconds // 60
         secs = seconds % 60
         return f"{minutes}:{secs:02d}"
 
     def _indicator(self, qty):
+        """Индикатор количества (3 уровня)."""
         if qty > 20:
             return "много"
         elif qty > 5:
@@ -192,9 +220,45 @@ class ViewForm:
         else:
             return "мало"
 
+    def get_product_formats(self, product_id):
+        """
+        Возвращает список форматов файла для товара.
+
+        Если в БД нет колонки «формат» — стандартный набор.
+        """
+        try:
+            import sqlite3
+            from config import DB_PATH
+
+            conn = sqlite3.connect(DB_PATH)
+            cur = conn.cursor()
+
+            # Проверяем, есть ли колонка «формат»
+            cur.execute("PRAGMA table_info(Товар)")
+            columns = [col[1] for col in cur.fetchall()]
+
+            if "формат" in columns:
+                cur.execute(
+                    "SELECT DISTINCT формат FROM Товар WHERE id = ?",
+                    (product_id,)
+                )
+                rows = cur.fetchall()
+                conn.close()
+                return [row[0] for row in rows if row[0]]
+
+            conn.close()
+            return ["MP3", "FLAC", "WAV"]
+
+        except Exception as e:
+            print(f"[DEBUG] Ошибка get_product_formats: {e}")
+            return ["MP3"]
+
+    # ==========================================================
+    #  ЗАДАНИЕ 5 — ВАЛИДАЦИЯ ВВОДА
+    # ==========================================================
     def check_quantity(self):
-        """Проверяет ввод количества."""
-        value = self.qty_entry.get()
+        """Проверяет ввод количества через validate_positive_int."""
+        value = self.qty_var.get()
         ok, result = validate_positive_int(value, "Количество")
 
         if ok:
@@ -209,35 +273,32 @@ class ViewForm:
             )
 
     # ==========================================================
-    #  ЗАДАНИЕ 5.4 — ДОБАВЛЕНИЕ В ЗАКАЗ
+    #  ДОБАВЛЕНИЕ В ЗАКАЗ (с валидацией)
     # ==========================================================
     def add_to_order(self):
-        """Обработчик кнопки «Добавить в заказ»."""
-        # 1. Проверка товара
+        """Обработчик кнопки «Добавить в заказ» с валидацией."""
+        # 1. Проверяем товар
         if not self.product:
             messagebox.showerror("Ошибка", "Товар не выбран")
             return
 
-        # 2. Проверяем ввод количества
-        value = self.qty_entry.get()
-        ok, result = validate_positive_int(value, "Количество")
-
+        # 2. Валидация количества через validate_positive_int
+        ok, result = validate_positive_int(self.qty_var.get(), "Количество")
         if not ok:
             messagebox.showwarning("Ошибка ввода", str(result))
             return
 
-        quantity = int(result) 
+        qty = int(result)   # result — целое число
 
         try:
             product_id = self.product[0]
 
-            # 3. Проверяем остаток
+            # 3. Проверяем, что количество не больше доступного
             current_qty = int(get_product_quantity(product_id))
-
-            if current_qty < quantity:
+            if qty > current_qty:
                 messagebox.showwarning(
-                    "Товар закончился",
-                    f"В наличии только {current_qty} шт."
+                    "Ошибка",
+                    f"Доступно только {current_qty} шт."
                 )
                 return
 
@@ -245,7 +306,7 @@ class ViewForm:
             order_id = add_order_to_db(
                 "Иванов Иван Иванович",
                 product_id,
-                quantity
+                qty
             )
 
             if order_id is None:
@@ -253,27 +314,28 @@ class ViewForm:
                 return
 
             # 5. Обновляем остаток
-            new_qty = current_qty - quantity
+            new_qty = current_qty - qty
             update_product_quantity(product_id, new_qty)
 
-            # 6. Успех
-            messagebox.showinfo(
-                "Заказ оформлен",
-                f"Заказ №{order_id} на {quantity} шт. товара «{self.product[3]}»"
-            )
-
-            # 7. Обновляем каталог (если callback передан)
+            # 6. Вызываем callback (если передан)
             if self.on_add_to_order:
                 try:
-                    self.on_add_to_order()
+                    self.on_add_to_order(self.product, qty)
                 except TypeError:
-                    self.on_add_to_order(self.product, quantity)
+                    self.on_add_to_order()
 
-            # 8. Закрываем форму
+            # 7. Успех
+            fmt = self.format_var.get()
+            messagebox.showinfo(
+                "Успех",
+                f"Товар добавлен в заказ ({qty} шт.)\n"
+                f"Заказ №{order_id}\n"
+                f"Формат: {fmt}"
+            )
             self.window.destroy()
 
         except Exception as e:
             messagebox.showerror(
                 "Ошибка заказа",
-                f"Не удалось оформить заказ:\n{e}"
+                f"Не удалось добавить товар:\n{e}"
             )

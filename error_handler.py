@@ -48,14 +48,22 @@ def validate_positive_int(value, field_name="Значение"):
     """
     Проверяет, что значение — положительное целое число.
 
-    :param value: значение для проверки
-    :param field_name: название поля для сообщения
-    :return: (True, число) или (False, текст ошибки)
+    :param value: значение для проверки (строка или число)
+    :param field_name: название поля (для сообщения)
+    :return: (True, число) при успехе, (False, текст_ошибки) при ошибке
+
+    Примеры:
+        validate_positive_int("5", "Количество")   → (True, 5)
+        validate_positive_int("0", "Количество")   → (False, "Количество должно быть больше нуля")
+        validate_positive_int("-3", "Количество")  → (False, "Количество должно быть больше нуля")
+        validate_positive_int("abc", "Количество") → (False, "Количество должно быть целым числом")
     """
     try:
         number = int(value)
-        if number <= 0:
-            return (False, f"{field_name} должно быть больше нуля")
-        return (True, number)
     except (ValueError, TypeError):
         return (False, f"{field_name} должно быть целым числом")
+
+    if number <= 0:
+        return (False, f"{field_name} должно быть больше нуля")
+
+    return (True, number)
